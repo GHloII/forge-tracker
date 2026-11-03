@@ -1,0 +1,49 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.16'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'dev.forge'
+version = '1.0.0'
+java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
+repositories { mavenCentral() }
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.xerial:sqlite-jdbc:3.54.1.0'
+    implementation 'io.modelcontextprotocol.sdk:mcp:0.18.5'
+    implementation 'io.modelcontextprotocol.sdk:mcp-spring-webmvc:0.18.5'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+tasks.named('test') { useJUnitPlatform() }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+tasks.register('resolveDependencies') {
+    doLast {
+        configurations.compileClasspath.resolve()
+        configurations.runtimeClasspath.resolve()
+    }
+}
+tasks.register('frontendInstall', Exec) {
+    workingDir 'frontend'
+    commandLine System.getProperty('os.name').toLowerCase().contains('windows') ? ['cmd', '/c', 'npm', 'ci'] : ['npm', 'ci']
+    inputs.files('frontend/package.json', 'frontend/package-lock.json')
+    outputs.dir('frontend/node_modules')
+}
+tasks.register('frontendBuild', Exec) {
+    dependsOn 'frontendInstall'
+    workingDir 'frontend'
+    commandLine System.getProperty('os.name').toLowerCase().contains('windows') ? ['cmd', '/c', 'npm', 'run', 'build'] : ['npm', 'run', 'build']
+    inputs.dir('frontend/src'); inputs.files('frontend/index.html', 'frontend/vite.config.ts')
+    outputs.dir('frontend/dist')
+}
+tasks.named('processResources') {
+    dependsOn 'frontendBuild'
+    from('frontend/dist') { into 'static' }
+}

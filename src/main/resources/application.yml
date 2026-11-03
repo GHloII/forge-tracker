@@ -1,0 +1,40 @@
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      timeout: 8h
+      cookie:
+        http-only: true
+        secure: ${COOKIE_SECURE:true}
+        same-site: strict
+spring:
+  application:
+    name: forge
+  datasource:
+    url: jdbc:sqlite:${DATA_DIR:./data}/tracker.db?journal_mode=WAL&foreign_keys=on&busy_timeout=5000&transaction_mode=IMMEDIATE
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 1
+      minimum-idle: 1
+      connection-init-sql: PRAGMA foreign_keys=ON
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+tracker:
+  data-dir: ${DATA_DIR:./data}
+  bootstrap-user: ${BOOTSTRAP_USER:owner}
+  bootstrap-password: ${BOOTSTRAP_PASSWORD:}
+  public-origin: ${PUBLIC_ORIGIN:https://localhost}

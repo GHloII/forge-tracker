@@ -1,0 +1,36 @@
+name: forge-tracker
+services:
+  app:
+    image: ${FORGE_IMAGE:?Set FORGE_IMAGE}
+    container_name: forge-tracker
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      COOKIE_SECURE: "true"
+      JAVA_TOOL_OPTIONS: -Xms32m -Xmx192m -Xss512k -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=48m -XX:ActiveProcessorCount=1 -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError
+      SERVER_TOMCAT_THREADS_MAX: "20"
+      SERVER_TOMCAT_THREADS_MIN_SPARE: "2"
+    volumes:
+      - tracker_data:/data
+    networks:
+      proxy:
+        aliases: [forge-tracker]
+    mem_limit: 384m
+    cpus: 0.75
+    stop_grace_period: 30s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+volumes:
+  tracker_data:
+    name: forge-tracker-data
+networks:
+  proxy:
+    external: true
+    name: watch-together-production_default

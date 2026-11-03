@@ -1,0 +1,44 @@
+{
+	email {$ACME_EMAIL}
+	servers {
+		timeouts {
+			read_header 10s
+			read_body 30s
+			idle 5m
+		}
+	}
+}
+
+{$DOMAIN} {
+	request_body {
+		max_size 6MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+	@stream path /mcp /mcp/*
+	handle @stream {
+		reverse_proxy {$APP_UPSTREAM:127.0.0.1:8080} {
+			flush_interval -1
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 30s
+				keepalive 2m
+			}
+		}
+	}
+	handle {
+		encode zstd gzip
+		reverse_proxy {$APP_UPSTREAM:127.0.0.1:8080} {
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 30s
+				keepalive 2m
+			}
+		}
+	}
+}
