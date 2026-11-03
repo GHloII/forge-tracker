@@ -2,6 +2,12 @@
 
 A self-hosted issue tracker for small teams and coding agents. Java 21, Spring Boot, SQLite, Svelte and MCP Streamable HTTP run in one application process. Caddy provides the HTTPS entry point.
 
+Production: https://forge.144-31-86-112.sslip.io
+
+Pushes to `main` verify, build and deploy through GitHub Actions. See
+[production operations](deploy/README.md) for credentials management, backups,
+health checks and rollback.
+
 ## Deploy
 
 Requirements: Docker Compose, a domain pointing to the VPS, and Caddy on the host. Open ports 80 and 443 for Caddy; keep port 8080 private.
@@ -95,10 +101,3 @@ The integration suite exercises real SQLite migrations, competing writes, permis
 Measured locally on Windows with Java 21 and `-Xms64m -Xmx320m`: initial startup 5.06 seconds, approximately 213 MiB working set and 254 MiB private memory after several interactive operations. The application JAR was approximately 44.2 MiB; the frontend JavaScript approximately 59 KB gzip. These observations describe a small local workload; measure your own container under its expected load.
 
 Docker verification with one CPU and a 512 MiB limit measured a 12.1-second first startup and approximately 181 MiB after the HTTP smoke test. Caddy configuration validation, a smoke test through a local Caddy reverse proxy and data verification after container restart passed. Public-domain certificate issuance requires deployment with working DNS and reachable ACME ports.
-# Live instance and automatic deployment
-
-Production: https://forge.144-31-86-112.sslip.io
-
-Pushes to `main` verify, build and deploy through GitHub Actions. See
-[production operations](deploy/README.md) for credentials management, backups,
-health checks and rollback.
