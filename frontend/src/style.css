@@ -2215,3 +2215,19 @@ time {
 .compact-issues .issue-row > .row-actions { grid-row: 1; }
 
 .rejected-tag { color: #f07882; font-size: 10px; white-space: nowrap; flex-shrink: 0; }
+
+/* Account-based MCP connections */
+.mcp-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.mcp-toolbar h2 { margin: 0 auto 0 0; }
+.mcp-project { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+.mcp-project select { width: 160px; padding: 5px 8px; }
+.member-list > div .connect-mcp { margin-left: auto; }
+.member-list > div .connect-mcp + button { margin-left: 0; }
+.mcp-result { margin-bottom: 24px; max-width: 650px; }
+.mcp-result label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; }
+.mcp-result input, .mcp-result textarea { width: 100%; font-family: Consolas, monospace; }
+.mcp-result > div { display: flex; gap: 8px; }
+.add-person summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.participant-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 600px; gap: 12px; }
+.participant-form button { justify-self: start; }
+@media (max-width: 600px) { .participant-form { grid-template-columns: 1fr; } .mcp-project select { width: 130px; } }

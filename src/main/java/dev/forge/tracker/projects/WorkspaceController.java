@@ -128,6 +128,13 @@ public class WorkspaceController {
     return Map.of("ok", true);
   }
 
+  public record McpConnection(long account, long project) {}
+
+  @PostMapping("/mcp-connections")
+  public Object connectMcp(Authentication auth, @RequestBody McpConnection input) {
+    return tokens.connect(identity.actor(auth), input.account(), input.project());
+  }
+
   public record TokenInput(
       long user, long project, String name, String permission, String expiresAt) {}
 
@@ -144,11 +151,7 @@ public class WorkspaceController {
 
   @GetMapping("/tokens")
   public Object tokens(Authentication auth) {
-    access.admin(identity.actor(auth));
-    return db.rows(
-        "SELECT"
-            + " t.id,t.user_id,t.project_id,t.name,t.permission,t.expires_at,t.revoked,t.created_at,u.username"
-            + " FROM tokens t JOIN users u ON u.id=t.user_id ORDER BY t.id DESC LIMIT 200");
+    return tokens.list(identity.actor(auth));
   }
 
   @DeleteMapping("/tokens/{id}")

@@ -63,7 +63,7 @@ let csrf = { token: '', header: 'X-CSRF-TOKEN' };
 export async function refreshCsrf() {
   csrf = await (await fetch('/api/csrf')).json();
 }
-export async function api<T = any>(path: string, method = 'GET', body?: unknown): Promise<T> {
+export async function api<T = any>(path: string, method = 'GET', body?: unknown, csrfRetry = true): Promise<T> {
   const headers: Record<string, string> = {};
   if (method !== 'GET') {
     if (!csrf.token) await refreshCsrf();
@@ -83,6 +83,10 @@ export async function api<T = any>(path: string, method = 'GET', body?: unknown)
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: `Request failed (${res.status})` }));
+    if (res.status === 403 && error.code === 'CSRF_EXPIRED' && method !== 'GET' && csrfRetry) {
+      await refreshCsrf();
+      return api<T>(path, method, body, false);
+    }
     throw new Error(error.message ?? 'Request failed');
   }
   return res.json();

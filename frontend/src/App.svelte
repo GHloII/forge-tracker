@@ -90,8 +90,7 @@
     audit = $state<Entry[]>([]),
     auditPage = $state(0);
   let userForm = $state({ username: '', displayName: '', kind: 'DEVELOPER', password: '', account: '' });
-  let tokenForm = $state({ user: '', project: '', name: '', permission: 'WRITE', expiresAt: '' }),
-    freshToken = $state('');
+  let freshToken = $state(''), mcpAccountName = $state(''), mcpProject = $state('');
   let projectForm = $state({ key: '', name: '', description: '', repository: '' }),
     projectEditId = $state<number | null>(null),
     projectFormOpen = $state(false);
@@ -593,7 +592,7 @@
     });
   }
   async function loadSettings() {
-    if (!owner) return;
+    if (!owner) { tokens = await api<Entry[]>('/tokens'); return; }
     [allUsers, tokens, audit] = await Promise.all([
       api<Person[]>('/users'),
       api<Entry[]>('/tokens'),
@@ -609,22 +608,12 @@
       notify('Participant created');
     });
   }
-  async function bindAgentAccount(user: Person, account: string) {
+  async function connectMcp(account: number, name: string) {
     await run(async () => {
-      await api(`/users/${user.id}/account`, 'PUT', { account: Number(account) });
-      await loadSettings();
-    });
-  }
-  async function createToken(event: SubmitEvent) {
-    event.preventDefault();
-    await run(async () => {
-      const data = await api<Entry>('/tokens', 'POST', {
-        ...tokenForm,
-        user: Number(tokenForm.user),
-        project: Number(tokenForm.project),
-        expiresAt: tokenForm.expiresAt ? new Date(tokenForm.expiresAt).toISOString() : null,
-      });
-      freshToken = data.token;
+      const chosen = mcpProject || project || String(projects[0]?.id ?? '');
+      const result = await api<Entry>('/mcp-connections', 'POST', { account, project: Number(chosen) });
+      freshToken = result.token;
+      mcpAccountName = name;
       await loadSettings();
     });
   }
@@ -1286,13 +1275,32 @@
           />{/key}
       {:else if view === 'Settings'}
         <div class="settings-tabs">
-          {#each owner ? ['Account', 'People', 'Agent tokens', 'Audit log'] : ['Account'] as section}<button
+          {#each owner ? ['Account', 'People', 'MCP connections', 'Audit log'] : ['Account', 'MCP connections'] as section}<button
               class:active={settingsTab === section}
               onclick={() => (settingsTab = section)}>{section}</button
             >{/each}
         </div>
         <div class="settings-content">
+          {#if freshToken}
+            <div class="token-reveal mcp-result">
+              <strong>MCP · {mcpAccountName}</strong>
+              <p class="muted">Copy this token now. It is shown only once.</p>
+              <label>Server URL<input readonly value={location.origin + '/mcp'} /></label>
+              <label>Bearer token<textarea readonly value={freshToken} aria-label="MCP bearer token"></textarea></label>
+              <div><button onclick={() => run(async () => { await navigator.clipboard.writeText(freshToken); notify('Token copied'); })}>Copy token</button><button class="text-button" onclick={() => freshToken = ''}>Done</button></div>
+            </div>
+          {/if}
+          {#snippet mcpProjectPicker()}
+            <label class="mcp-project">Project
+              <select aria-label="MCP project" value={mcpProject || project || String(projects[0]?.id ?? '')} onchange={event => mcpProject = event.currentTarget.value} disabled={busy}>
+                {#each projects as p}<option value={String(p.id)}>{p.name}</option>{/each}
+              </select>
+            </label>
+          {/snippet}
           {#if settingsTab === 'Account'}<section>
+              <div class="mcp-toolbar"><h2>MCP access</h2>{@render mcpProjectPicker()}<button disabled={busy || !projects.length} onclick={() => me && connectMcp(me.id, me.username)}>Connect MCP</button></div>
+              <p class="muted">Connect your coding assistant with your project permissions.</p>
+            </section><section>
               <h2>Appearance</h2>
               <p class="muted">Choose how Forge looks on this device.</p>
               <div class="theme-options">
@@ -1336,26 +1344,14 @@
               </form>
             </section>
           {:else if settingsTab === 'People'}<section>
-              <h2>People & agents</h2>
+              <div class="mcp-toolbar"><h2>People</h2>{@render mcpProjectPicker()}</div>
               <div class="member-list">
-                {#each allUsers as user}<div>
+                {#each allUsers.filter(u => u.kind !== 'AGENT') as user}<div>
                     <span class="avatar">{user.display_name.slice(0, 2)}</span><strong
                       >{user.display_name}</strong
                     ><span class="muted">@{user.username}</span><span class="tag"
                       >{label(user.kind)}</span
-                    >{#if user.kind === 'AGENT'}
-                      <select
-                        aria-label={'Account for ' + user.display_name}
-                        disabled={busy}
-                        value={user.account_id ?? ''}
-                        onchange={(event) => bindAgentAccount(user, event.currentTarget.value)}
-                      >
-                        <option value="" disabled>Select account</option>
-                        {#each allUsers.filter(u => u.kind !== 'AGENT' && u.enabled) as person}
-                          <option value={person.id}>{person.display_name}</option>
-                        {/each}
-                      </select>
-                    {/if}<button
+                    ><button class="connect-mcp" disabled={busy || !user.enabled || !projects.length} onclick={() => connectMcp(user.id, user.display_name)}>Connect MCP</button><button
                       disabled={busy || user.id === me.id}
                       onclick={() =>
                         run(async () => {
@@ -1367,8 +1363,8 @@
               </div>
             </section>
             <section>
-              <h2>Add participant</h2>
-              <form class="settings-form" onsubmit={createUser}>
+              <details class="add-person"><summary>Add person</summary>
+              <form class="settings-form participant-form" onsubmit={createUser}>
                 <label
                   >Username<input
                     bind:value={userForm.username}
@@ -1385,16 +1381,9 @@
                   >Role<select bind:value={userForm.kind}
                     ><option value="DEVELOPER">Developer</option><option value="OWNER"
                       >Owner / Reviewer</option
-                    ><option value="AGENT">Agent</option></select
+                    ></select
                   ></label
-                >{#if userForm.kind === 'AGENT'}
-                  <label>Account<select bind:value={userForm.account} required>
-                    <option value="">Select account</option>
-                    {#each allUsers.filter(u => u.kind !== 'AGENT' && u.enabled) as person}
-                      <option value={String(person.id)}>{person.display_name}</option>
-                    {/each}
-                  </select></label>
-                {/if}{#if userForm.kind !== 'AGENT'}<label
+                >{#if userForm.kind !== 'AGENT'}<label
                     >Initial password<input
                       type="password"
                       bind:value={userForm.password}
@@ -1404,56 +1393,14 @@
                       autocomplete="new-password"
                     /></label
                   >{/if}<button disabled={busy}>Create participant</button>
-              </form>
+              </form></details>
             </section>
-          {:else if settingsTab === 'Agent tokens'}<section>
-              <h2>MCP access</h2>
-              <p class="muted">
-                Streamable HTTP endpoint: <code>{location.origin}/mcp</code>. Each token belongs to
-                one agent and one project, limited by its linked human account. Approval permissions are never granted.
-              </p>
-              {#if freshToken}<div class="token-reveal">
-                  <strong>Copy this token now. It will not be shown again.</strong><textarea
-                    readonly
-                    value={freshToken}
-                    aria-label="New agent token"></textarea><button
-                    onclick={() => {
-                      freshToken = '';
-                    }}>I have saved the token</button
-                  >
-                </div>{/if}
-              <form class="settings-form" onsubmit={createToken}>
-                <label
-                  >Agent<select bind:value={tokenForm.user} required
-                    ><option value="">Select agent</option
-                    >{#each allUsers.filter((u) => u.kind === 'AGENT' && u.enabled) as agent}<option
-                        value={agent.id}>{agent.display_name}</option
-                      >{/each}</select
-                  ></label
-                ><label
-                  >Project<select bind:value={tokenForm.project} required
-                    ><option value="">Select project</option>{#each projects as p}<option
-                        value={p.id}>{p.name}</option
-                      >{/each}</select
-                  ></label
-                ><label
-                  >Token name<input bind:value={tokenForm.name} maxlength="100" required /></label
-                ><label
-                  >Permission<select bind:value={tokenForm.permission}
-                    ><option value="READ">Read</option><option value="WRITE">Write</option><option
-                      value="MANAGE">Task management</option
-                    ></select
-                  ></label
-                ><label
-                  >Expiration (optional)<input
-                    type="datetime-local"
-                    bind:value={tokenForm.expiresAt}
-                  /></label
-                ><button disabled={busy}>Create token</button>
-              </form>
+          {:else if settingsTab === 'MCP connections'}<section>
+              <h2>MCP connections</h2>
+              <p class="muted">Connect MCP from your Account or the People list. Access is limited by the linked account and project.</p>
               <div class="member-list">
                 {#each tokens as token}<div>
-                    <strong>{token.name}</strong><span>@{token.username}</span><span class="tag"
+                    <strong>{token.account_name ?? token.name}</strong><span>{token.project_name}</span><span class="tag"
                       >{token.permission}</span
                     ><small>{token.expires_at ? date(token.expires_at) : 'No expiry'}</small><button
                       disabled={token.revoked || busy}

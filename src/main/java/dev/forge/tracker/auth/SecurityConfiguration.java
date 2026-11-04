@@ -134,8 +134,12 @@ public class SecurityConfiguration {
                             json(
                                 r,
                                 403,
-                                "FORBIDDEN",
-                                "Access denied or CSRF token missing. Refresh and retry.")))
+                                ex instanceof org.springframework.security.web.csrf.CsrfException
+                                    ? "CSRF_EXPIRED"
+                                    : "FORBIDDEN",
+                                ex instanceof org.springframework.security.web.csrf.CsrfException
+                                    ? "Your session token expired. Please retry."
+                                    : "You do not have permission for this action.")))
         .headers(
             h ->
                 h.contentSecurityPolicy(

@@ -138,6 +138,45 @@ class TrackerIntegrationTest {
     assertThatThrownBy(() -> projects.user(owner, "nested", "Nested", "AGENT", null, agent.id())).isInstanceOf(Problem.class);
   }
 
+  @Test
+  void oneClickMcpCreatesLinkedIdentityAndUsesHumanPermissions() {
+    var result = tokens.connect(developer, developer.id(), project);
+    Actor connected = tokens.authenticate((String) result.get("token"));
+    assertThat(db.one(Long.class, "SELECT account_id FROM users WHERE id=?", connected.id())).isEqualTo(developer.id());
+    access.require(connected, project, Access.Permission.WRITE);
+    assertThatThrownBy(() -> access.require(connected, project, Access.Permission.MANAGE)).isInstanceOf(Problem.class);
+    var again = tokens.connect(owner, developer.id(), project);
+    assertThat(tokens.authenticate((String) again.get("token")).id()).isEqualTo(connected.id());
+    assertThatThrownBy(() -> tokens.connect(developer, other.id(), project)).isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> tokens.connect(developer, developer.id(), isolated)).isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> tokens.connect(agent, agent.id(), project)).isInstanceOf(Problem.class);
+    assertThat(tokens.list(developer)).extracting(row -> ((Number) row.get("id")).longValue()).contains(((Number) result.get("id")).longValue());
+    assertThat(tokens.list(other)).extracting(row -> ((Number) row.get("id")).longValue()).doesNotContain(((Number) result.get("id")).longValue());
+    assertThatThrownBy(() -> tokens.revoke(other, ((Number) result.get("id")).longValue())).isInstanceOf(Problem.class);
+    tokens.revoke(developer, ((Number) again.get("id")).longValue());
+    assertThatThrownBy(() -> tokens.authenticate((String) again.get("token"))).isInstanceOf(Problem.class);
+    projects.member(owner, project, developer.id(), "READ");
+    assertThatThrownBy(() -> tasks.create(connected, project, input("Blocked"))).isInstanceOf(Problem.class);
+    Actor reader = tokens.authenticate((String) tokens.connect(developer, developer.id(), project).get("token"));
+    access.require(reader, project, Access.Permission.READ);
+    assertThatThrownBy(() -> access.require(reader, project, Access.Permission.WRITE)).isInstanceOf(Problem.class);
+    projects.updateUser(owner, developer.id(), false, null);
+    assertThatThrownBy(() -> tokens.connect(owner, developer.id(), project)).isInstanceOf(Problem.class);
+  }
+
+  @Test
+  void oneClickMcpEndpointRequiresCsrfAndDistinguishesExpiredToken() throws Exception {
+    var request = org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/mcp-connections")
+        .contentType("application/json").content("{\"account\":" + owner.id() + ",\"project\":" + project + "}")
+        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("owner").roles("OWNER"));
+    mvc.perform(request.with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf().useInvalidToken()))
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isForbidden())
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.code").value("CSRF_EXPIRED"));
+    mvc.perform(request.with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()))
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.token").isString());
+  }
+
   TaskInput input(String title) {
     return new TaskInput(
         title, "## Scope\nBuild the feature", "FEATURE", "HIGH", "Gameplay", List.of("core"));

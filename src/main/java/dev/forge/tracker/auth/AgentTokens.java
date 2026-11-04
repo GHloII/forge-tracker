@@ -47,6 +47,11 @@ public class AgentTokens {
   public Map<String, Object> create(
       Actor actor, long user, long project, String name, String permission, String expiresAt) {
     access.admin(actor);
+    return issue(actor, user, project, name, permission, expiresAt);
+  }
+
+  private Map<String, Object> issue(
+      Actor actor, long user, long project, String name, String permission, String expiresAt) {
     if (permission == null
         || !Set.of("READ", "WRITE", "MANAGE").contains(permission)
         || name == null
@@ -92,8 +97,89 @@ public class AgentTokens {
   }
 
   @Transactional
+  public Map<String, Object> connect(Actor actor, long account, long project) {
+    if (actor.agent()) throw Problem.forbidden();
+    if (actor.id() != account) access.admin(actor);
+    var human =
+        db
+            .rows(
+                "SELECT id,kind,display_name FROM users WHERE id=? AND enabled=1 AND kind IN"
+                    + " ('OWNER','DEVELOPER')",
+                account)
+            .stream()
+            .findFirst()
+            .orElseThrow(Problem::forbidden);
+    String permission =
+        "OWNER".equals(human.get("kind"))
+            ? "MANAGE"
+            : db.optional(
+                    String.class,
+                    "SELECT permission FROM members WHERE project_id=? AND user_id=?",
+                    project,
+                    account)
+                .orElseThrow(Problem::forbidden);
+    access.require(
+        new Actor(account, "", String.valueOf(human.get("kind")), null, null, null),
+        project,
+        Access.Permission.READ);
+    if (db.rows("SELECT id FROM projects WHERE id=?", project).isEmpty()) throw Problem.missing();
+    Long agent =
+        db.optional(
+                Long.class,
+                "SELECT id FROM users WHERE account_id=? AND kind='AGENT' AND enabled=1 AND"
+                    + " username LIKE ? ORDER BY id LIMIT 1",
+                account,
+                "mcp-" + account + "-%")
+            .orElse(null);
+    if (agent == null) {
+      db.execute(
+          "INSERT INTO users(username,display_name,kind,account_id) VALUES(?,?,'AGENT',?)",
+          "mcp-" + account + "-" + UUID.randomUUID().toString().substring(0, 8),
+          human.get("display_name") + " · MCP",
+          account);
+      agent = db.id();
+    }
+    db.execute(
+        "INSERT INTO members(project_id,user_id,permission,role_id) VALUES(?,?,?,(SELECT id FROM"
+            + " project_roles WHERE project_id=? AND builtin=1 AND permission=?)) ON"
+            + " CONFLICT(project_id,user_id) DO UPDATE SET"
+            + " permission=excluded.permission,role_id=excluded.role_id",
+        project,
+        agent,
+        permission,
+        project,
+        permission);
+    String name = String.valueOf(human.get("display_name"));
+    return issue(
+        actor,
+        agent,
+        project,
+        name.substring(0, Math.min(name.length(), 94)) + " · MCP",
+        permission,
+        null);
+  }
+
+  public List<Map<String, Object>> list(Actor actor) {
+    if (actor.agent()) throw Problem.forbidden();
+    return db.rows(
+        "SELECT t.id,t.name,t.permission,t.expires_at,t.revoked,h.display_name AS"
+            + " account_name,p.name AS project_name FROM tokens t JOIN users u ON u.id=t.user_id"
+            + " LEFT JOIN users h ON h.id=u.account_id JOIN projects p ON p.id=t.project_id WHERE"
+            + " (?=1 OR u.account_id=?) ORDER BY t.id DESC LIMIT 200",
+        actor.owner() ? 1 : 0,
+        actor.id());
+  }
+
+  @Transactional
   public void revoke(Actor actor, long id) {
-    access.admin(actor);
+    if (actor.agent()
+        || (!actor.owner()
+            && db.rows(
+                    "SELECT t.id FROM tokens t JOIN users u ON u.id=t.user_id WHERE t.id=? AND"
+                        + " u.account_id=?",
+                    id,
+                    actor.id())
+                .isEmpty())) throw Problem.forbidden();
     db.execute("UPDATE tokens SET revoked=1 WHERE id=?", id);
     db.execute(
         "INSERT INTO audit(actor_id,action,target,created_at) VALUES(?,'TOKEN_REVOKED',?,?)",
