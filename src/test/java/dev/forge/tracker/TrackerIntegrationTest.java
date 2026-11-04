@@ -294,6 +294,23 @@ class TrackerIntegrationTest {
   }
 
   @Test
+  void rejectedTasksSortLastBeforePagination() {
+    Task active = tasks.create(developer, project, input("Z active"));
+    Task rejected = tasks.create(developer, project, input("A rejected"));
+    tasks.approve(owner, rejected.identifier(), rejected.version(), "REJECTED", "Out of scope");
+    for (String sort : List.of("updated", "created", "title", "priority")) {
+      var filter = new TaskRepository.Filter(project, null, null, null, null, null, null,
+          null, null, false, false, sort, 0, 1);
+      assertThat(tasks.listForUi(owner, filter).items().getFirst().get("identifier"))
+          .isEqualTo(active.identifier());
+      var last = new TaskRepository.Filter(project, null, null, null, null, null, null,
+          null, null, false, false, sort, 1, 1);
+      assertThat(tasks.listForUi(owner, last).items().getFirst().get("identifier"))
+          .isEqualTo(rejected.identifier());
+    }
+  }
+
+  @Test
   void rejectedTaskMustBeRevisedAndChangesRequestedCanBeResubmitted() {
     Task task = tasks.create(developer, project, input("Rejected"));
     task = tasks.approve(owner, task.identifier(), task.version(), "REJECTED", "Out of scope");

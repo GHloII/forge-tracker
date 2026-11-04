@@ -2213,3 +2213,5 @@ time {
 
 .compact-issues .row-assignee,
 .compact-issues .issue-row > .row-actions { grid-row: 1; }
+
+.rejected-tag { color: #f07882; font-size: 10px; white-space: nowrap; flex-shrink: 0; }

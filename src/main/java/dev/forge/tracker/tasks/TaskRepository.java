@@ -99,7 +99,7 @@ public class TaskRepository {
     return new Page<>(
         db.list(
             Task.class,
-            "SELECT t.*" + sql + " ORDER BY " + sort + " LIMIT ? OFFSET ?",
+            "SELECT t.*" + sql + " ORDER BY CASE WHEN t.approval='REJECTED' THEN 1 ELSE 0 END," + sort + " LIMIT ? OFFSET ?",
             args.toArray()),
         total,
         filter.page(),

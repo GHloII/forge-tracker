@@ -1061,7 +1061,7 @@
                     </div>
                     <strong>{item.title}</strong>
                     <div class="card-footer">
-                      {#if item.approval === 'PENDING'}<span class="approval-tag">◇ Pending</span
+                      {#if item.approval === 'REJECTED'}<span class="rejected-tag">● Rejected</span>{:else if item.approval === 'PENDING'}<span class="approval-tag">◇ Pending</span
                         >{:else}<span class="muted">{label(item.type)}</span>{/if}<span
                         class="avatar tiny"
                         title={name(item.assigneeId)}
@@ -1086,6 +1086,7 @@
                   <span class="issue-id">{item.identifier}</span>
                   <span class="issue-title" title={item.title}><strong>{item.title}</strong>
                     {#each labels(item.labels).slice(0, 1) as tag}<span class="tag">{tag}</span>{/each}
+                    {#if item.approval === 'REJECTED'}<span class="rejected-tag">● Rejected</span>{/if}
                     {#if item.approval === 'PENDING' && view !== 'Approvals'}<span class="approval-tag">◇ Pending</span>{/if}
                   </span>
                   <span class="status-cell"><span class="status-dot" style:background={colors[item.status]}></span><span>{label(item.status)}</span></span>
