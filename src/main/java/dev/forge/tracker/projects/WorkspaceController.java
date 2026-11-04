@@ -128,11 +128,25 @@ public class WorkspaceController {
     return Map.of("ok", true);
   }
 
-  public record McpConnection(long account, long project) {}
+  public record McpConnection(long account, Long project, java.util.List<Long> projects) {}
 
   @PostMapping("/mcp-connections")
   public Object connectMcp(Authentication auth, @RequestBody McpConnection input) {
-    return tokens.connect(identity.actor(auth), input.account(), input.project());
+    return tokens.connect(
+        identity.actor(auth),
+        input.account(),
+        input.projects() != null
+            ? input.projects()
+            : input.project() == null ? java.util.List.of() : java.util.List.of(input.project()));
+  }
+
+  public record McpProjects(java.util.List<Long> projects) {}
+
+  @PutMapping("/mcp-connections/{id}/projects")
+  public Object mcpProjects(
+      Authentication auth, @PathVariable long id, @RequestBody McpProjects input) {
+    tokens.projects(identity.actor(auth), id, input.projects());
+    return Map.of("ok", true);
   }
 
   public record TokenInput(

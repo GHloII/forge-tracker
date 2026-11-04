@@ -40,7 +40,6 @@ public class TaskService {
 
   public TaskRepository.Page<Task> list(Actor actor, TaskRepository.Filter filter) {
     if (filter.project() != null) access.require(actor, filter.project(), READ);
-    if (actor.projectId() != null) access.require(actor, actor.projectId(), READ);
     return repository.list(actor, filter);
   }
 

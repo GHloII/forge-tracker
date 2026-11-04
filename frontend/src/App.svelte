@@ -90,7 +90,7 @@
     audit = $state<Entry[]>([]),
     auditPage = $state(0);
   let userForm = $state({ username: '', displayName: '', kind: 'DEVELOPER', password: '', account: '' });
-  let freshToken = $state(''), mcpAccountName = $state(''), mcpProject = $state('');
+  let freshToken = $state(''), mcpAccountName = $state(''), mcpProjects = $state<number[] | null>(null);
   let projectForm = $state({ key: '', name: '', description: '', repository: '' }),
     projectEditId = $state<number | null>(null),
     projectFormOpen = $state(false);
@@ -608,10 +608,18 @@
       notify('Participant created');
     });
   }
+  function selectedMcpProjects(): number[] {
+    return mcpProjects ?? (project ? [Number(project)] : projects[0] ? [projects[0].id] : []);
+  }
+  async function updateMcpProjects(id: number, selected: number[]) {
+    await run(async () => {
+      await api(`/mcp-connections/${id}/projects`, 'PUT', { projects: selected });
+      await loadSettings();
+    });
+  }
   async function connectMcp(account: number, name: string) {
     await run(async () => {
-      const chosen = mcpProject || project || String(projects[0]?.id ?? '');
-      const result = await api<Entry>('/mcp-connections', 'POST', { account, project: Number(chosen) });
+      const result = await api<Entry>('/mcp-connections', 'POST', { account, projects: selectedMcpProjects() });
       freshToken = result.token;
       mcpAccountName = name;
       await loadSettings();
@@ -1290,15 +1298,26 @@
               <div><button onclick={() => run(async () => { await navigator.clipboard.writeText(freshToken); notify('Token copied'); })}>Copy token</button><button class="text-button" onclick={() => freshToken = ''}>Done</button></div>
             </div>
           {/if}
+          {#snippet projectTags(ids: number[], change: (ids: number[]) => void, locked = false)}
+            <div class="mcp-project-tags" aria-label="Allowed projects">
+              {#each ids as id}
+                <span class="mcp-project-tag">{projects.find(p => p.id === id)?.name ?? 'Project ' + id}
+                  <button class="tag-remove" aria-label={'Remove project ' + (projects.find(p => p.id === id)?.name ?? id)} disabled={busy || locked} onclick={() => change(ids.filter(value => value !== id))}>×</button>
+                </span>
+              {/each}
+              {#if !locked && projects.some(p => !ids.includes(p.id))}
+                <details class="project-add"><summary aria-label="Add project">+</summary>
+                  <div class="project-add-menu">{#each projects.filter(p => !ids.includes(p.id)) as p}<button disabled={busy} onclick={() => change([...ids, p.id])}>+ {p.name}</button>{/each}</div>
+                </details>
+              {/if}
+              {#if !ids.length}<span class="muted">No project access</span>{/if}
+            </div>
+          {/snippet}
           {#snippet mcpProjectPicker()}
-            <label class="mcp-project">Project
-              <select aria-label="MCP project" value={mcpProject || project || String(projects[0]?.id ?? '')} onchange={event => mcpProject = event.currentTarget.value} disabled={busy}>
-                {#each projects as p}<option value={String(p.id)}>{p.name}</option>{/each}
-              </select>
-            </label>
+            {@render projectTags(selectedMcpProjects(), ids => mcpProjects = ids)}
           {/snippet}
           {#if settingsTab === 'Account'}<section>
-              <div class="mcp-toolbar"><h2>MCP access</h2>{@render mcpProjectPicker()}<button disabled={busy || !projects.length} onclick={() => me && connectMcp(me.id, me.username)}>Connect MCP</button></div>
+              <div class="mcp-toolbar"><h2>MCP access</h2>{@render mcpProjectPicker()}<button disabled={busy || !selectedMcpProjects().length} onclick={() => me && connectMcp(me.id, me.username)}>Connect MCP</button></div>
               <p class="muted">Connect your coding assistant with your project permissions.</p>
             </section><section>
               <h2>Appearance</h2>
@@ -1351,7 +1370,7 @@
                       >{user.display_name}</strong
                     ><span class="muted">@{user.username}</span><span class="tag"
                       >{label(user.kind)}</span
-                    ><button class="connect-mcp" disabled={busy || !user.enabled || !projects.length} onclick={() => connectMcp(user.id, user.display_name)}>Connect MCP</button><button
+                    ><button class="connect-mcp" disabled={busy || !user.enabled || !selectedMcpProjects().length} onclick={() => connectMcp(user.id, user.display_name)}>Connect MCP</button><button
                       disabled={busy || user.id === me.id}
                       onclick={() =>
                         run(async () => {
@@ -1400,9 +1419,8 @@
               <p class="muted">Connect MCP from your Account or the People list. Access is limited by the linked account and project.</p>
               <div class="member-list">
                 {#each tokens as token}<div>
-                    <strong>{token.account_name ?? token.name}</strong><span>{token.project_name}</span><span class="tag"
-                      >{token.permission}</span
-                    ><small>{token.expires_at ? date(token.expires_at) : 'No expiry'}</small><button
+                    <strong>{token.account_name ?? token.name}</strong>
+                    {@render projectTags((token.projects ?? []).map((p: Entry) => Number(p.id)), ids => updateMcpProjects(Number(token.id), ids), !!token.revoked)}<small>{token.expires_at ? date(token.expires_at) : 'No expiry'}</small><button
                       disabled={token.revoked || busy}
                       onclick={() =>
                         run(async () => {

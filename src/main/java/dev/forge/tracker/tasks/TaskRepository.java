@@ -53,9 +53,21 @@ public class TaskRepository {
           " AND EXISTS(SELECT 1 FROM members m WHERE m.project_id=t.project_id AND m.user_id=?)");
       args.add(actor.id());
     }
-    if (actor.projectId() != null) {
-      sql.append(" AND t.project_id=?");
-      args.add(actor.projectId());
+    if (actor.agent()) {
+      sql.append(
+          " AND EXISTS(SELECT 1 FROM users a JOIN users h ON h.id=a.account_id WHERE a.id=? AND"
+              + " a.enabled=1 AND h.enabled=1 AND (h.kind='OWNER' OR (h.kind='DEVELOPER' AND"
+              + " EXISTS(SELECT 1 FROM members hm WHERE hm.project_id=t.project_id AND"
+              + " hm.user_id=h.id))))");
+      args.add(actor.id());
+    }
+    if (actor.tokenId() != null) {
+      sql.append(
+          " AND EXISTS(SELECT 1 FROM tokens tok JOIN token_projects tp ON tp.token_id=tok.id WHERE"
+              + " tok.id=? AND tok.user_id=? AND tok.revoked=0 AND (tok.expires_at IS NULL OR"
+              + " julianday(tok.expires_at)>julianday('now')) AND tp.project_id=t.project_id)");
+      args.add(actor.tokenId());
+      args.add(actor.id());
     }
     if (filter.project() != null) {
       sql.append(" AND t.project_id=?");
@@ -99,7 +111,11 @@ public class TaskRepository {
     return new Page<>(
         db.list(
             Task.class,
-            "SELECT t.*" + sql + " ORDER BY CASE WHEN t.approval='REJECTED' THEN 1 ELSE 0 END," + sort + " LIMIT ? OFFSET ?",
+            "SELECT t.*"
+                + sql
+                + " ORDER BY CASE WHEN t.approval='REJECTED' THEN 1 ELSE 0 END,"
+                + sort
+                + " LIMIT ? OFFSET ?",
             args.toArray()),
         total,
         filter.page(),

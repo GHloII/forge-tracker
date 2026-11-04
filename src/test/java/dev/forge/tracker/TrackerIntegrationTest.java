@@ -177,6 +177,37 @@ class TrackerIntegrationTest {
         .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.token").isString());
   }
 
+  @Test
+  void mcpProjectTagsScopeListsAndRevokeAccessWithoutNewToken() {
+    Task first = tasks.create(owner, project, input("First scoped task"));
+    Task second = tasks.create(owner, isolated, input("Second scoped task"));
+    projects.member(owner, isolated, developer.id(), "READ");
+    var connection = tokens.connect(developer, developer.id(), List.of(project, isolated));
+    long id = ((Number) connection.get("id")).longValue();
+    Actor scoped = tokens.authenticate((String) connection.get("token"));
+    assertThat(projects.list(scoped)).hasSize(2);
+    assertThat(tasks.get(scoped, first.identifier()).id()).isEqualTo(first.id());
+    assertThat(tasks.get(scoped, second.identifier()).id()).isEqualTo(second.id());
+    assertThatThrownBy(() -> tasks.create(scoped, isolated, input("Read only"))).isInstanceOf(Problem.class);
+    var filter = new dev.forge.tracker.tasks.TaskRepository.Filter(null,null,null,null,null,null,null,null,null,false,false,"updated",0,100);
+    assertThat(tasks.list(scoped, filter).total()).isEqualTo(2);
+    tokens.projects(developer, id, List.of(project));
+    assertThatThrownBy(() -> tasks.get(scoped, second.identifier())).isInstanceOf(Problem.class);
+    assertThat(projects.list(scoped)).hasSize(1);
+    assertThat(tasks.list(scoped, filter).total()).isEqualTo(1);
+    assertThatThrownBy(() -> tokens.projects(other, id, List.of(isolated))).isInstanceOf(Problem.class);
+    tokens.projects(developer, id, List.of(project,isolated));
+    access.require(scoped, isolated, Access.Permission.READ);
+    projects.member(owner, isolated, developer.id(), "REMOVE");
+    assertThat(tasks.list(scoped, filter).total()).isEqualTo(1);
+    assertThatThrownBy(() -> tokens.projects(developer,id,List.of(isolated))).isInstanceOf(Problem.class);
+    assertThat(projects.list(scoped)).hasSize(1);
+    tokens.projects(developer,id,List.of());
+    assertThat(tasks.list(scoped, filter).total()).isZero();
+    assertThat(projects.list(scoped)).isEmpty();
+    assertThatThrownBy(() -> tokens.connect(developer,developer.id(),List.of())).isInstanceOf(Problem.class);
+  }
+
   TaskInput input(String title) {
     return new TaskInput(
         title, "## Scope\nBuild the feature", "FEATURE", "HIGH", "Gameplay", List.of("core"));

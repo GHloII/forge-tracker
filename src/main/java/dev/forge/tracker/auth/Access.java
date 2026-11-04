@@ -46,7 +46,11 @@ public class Access {
               actor.tokenId(),
               actor.id());
       if (token.isEmpty()
-          || actor.projectId() != project
+          || db.rows(
+                  "SELECT project_id FROM token_projects WHERE token_id=? AND project_id=?",
+                  actor.tokenId(),
+                  project)
+              .isEmpty()
           || rank(String.valueOf(token.getFirst().get("permission"))) < rank(permission.name()))
         throw Problem.forbidden();
     }

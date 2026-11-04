@@ -25,11 +25,9 @@ public class ProjectService {
     if (actor.owner()) return db.rows("SELECT * FROM projects ORDER BY name LIMIT 100");
     return db
         .rows(
-            "SELECT p.* FROM projects p JOIN members m ON m.project_id=p.id WHERE m.user_id=? AND"
-                + " (? IS NULL OR p.id=?) ORDER BY p.name LIMIT 100",
-            actor.id(),
-            actor.projectId(),
-            actor.projectId())
+            "SELECT p.* FROM projects p JOIN members m ON m.project_id=p.id WHERE m.user_id=? ORDER"
+                + " BY p.name LIMIT 100",
+            actor.id())
         .stream()
         .filter(
             p -> {

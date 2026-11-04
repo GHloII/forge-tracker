@@ -2231,3 +2231,13 @@ time {
 .participant-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 600px; gap: 12px; }
 .participant-form button { justify-self: start; }
 @media (max-width: 600px) { .participant-form { grid-template-columns: 1fr; } .mcp-project select { width: 130px; } }
+
+.mcp-project-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mcp-project-tag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; }
+.mcp-project-tags .tag-remove { padding: 0 2px; margin: 0; border: 0; background: transparent; color: var(--muted); font-size: 14px; line-height: 16px; }
+.project-add { position: relative; }
+.project-add summary { cursor: pointer; list-style: none; border: 1px dashed var(--border); border-radius: 4px; padding: 2px 8px; color: var(--muted); }
+.project-add summary::-webkit-details-marker { display: none; }
+.project-add-menu { position: absolute; z-index: 15; top: calc(100% + 5px); right: 0; min-width: 160px; padding: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; box-shadow: 0 8px 24px #0003; }
+.project-add-menu button { display: block; width: 100%; text-align: left; border: 0; margin: 0; }
+.member-list > div .mcp-project-tags button { margin: 0; }
