@@ -13,10 +13,22 @@ public class InvitationController {
     this.invitations = invitations;
     this.identity = identity;
   }
-  @GetMapping("/invitations")
-  public Object list(Authentication auth) { return invitations.list(identity.actor(auth)); }
-  @PostMapping("/invitations")
-  public Object create(Authentication auth) { return invitations.create(identity.actor(auth)); }
+  public record InvitationInput(long role) {}
+  public record Acceptance(String token) {}
+
+  @GetMapping("/projects/{project}/invitations")
+  public Object list(Authentication auth, @PathVariable long project) {
+    return invitations.list(identity.actor(auth), project);
+  }
+  @PostMapping("/projects/{project}/invitations")
+  public Object create(Authentication auth, @PathVariable long project, @RequestBody InvitationInput input) {
+    return invitations.create(identity.actor(auth), project, input.role());
+  }
+  @DeleteMapping("/projects/{project}/invitations/{id}")
+  public Object revokeProject(Authentication auth, @PathVariable long project, @PathVariable long id) {
+    invitations.revoke(identity.actor(auth), project, id);
+    return Map.of("ok", true);
+  }
   @DeleteMapping("/invitations/{id}")
   public Object revoke(Authentication auth, @PathVariable long id) {
     invitations.revoke(identity.actor(auth), id);
@@ -25,7 +37,10 @@ public class InvitationController {
   public record Registration(String token, String username, String displayName, String password) {}
   @PostMapping("/register")
   public Object register(@RequestBody Registration input) {
-    invitations.register(input.token(), input.username(), input.displayName(), input.password());
-    return Map.of("ok", true);
+    return invitations.register(input.token(), input.username(), input.displayName(), input.password());
+  }
+  @PostMapping("/invitations/accept")
+  public Object accept(Authentication auth, @RequestBody Acceptance input) {
+    return invitations.accept(identity.actor(auth), input.token());
   }
 }

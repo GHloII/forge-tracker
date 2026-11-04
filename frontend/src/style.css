@@ -377,6 +377,30 @@ time {
   color: var(--text);
   background: var(--hover);
 }
+.project-nav-row {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+.project-nav-row.chosen {
+  background: var(--hover);
+}
+.project-nav-row .project-nav {
+  flex: 1;
+  min-width: 0;
+}
+.project-settings-button {
+  flex-shrink: 0;
+  margin-right: 4px;
+  color: var(--muted);
+  opacity: 0.55;
+}
+.project-nav-row:hover .project-settings-button,
+.project-settings-button:focus-visible,
+.project-settings-button.active {
+  opacity: 1;
+  color: var(--text);
+}
 .project-glyph {
   display: inline-flex;
   justify-content: center;
@@ -970,6 +994,9 @@ time {
   border-bottom-color: var(--accent);
   color: var(--text);
 }
+.settings-tabs .settings-refresh {
+  margin-left: auto;
+}
 .settings-content {
   padding: 28px 32px 50px;
   max-width: 1050px;
@@ -998,6 +1025,50 @@ time {
 .settings-form button {
   align-self: flex-start;
   font-size: 12px;
+}
+.project-member-list {
+  margin-top: 18px;
+}
+.project-member-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.project-member-row small {
+  display: block;
+  margin-top: 4px;
+}
+.project-member-row select {
+  width: auto;
+  max-width: 200px;
+}
+.project-member-row button {
+  font-size: 11px;
+}
+.project-settings .section-toolbar {
+  padding: 0;
+  border: 0;
+}
+.project-settings .token-reveal {
+  margin-top: 20px;
+}
+.settings-notice {
+  color: var(--accent);
+}
+.invitation-card {
+  width: 380px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 32px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
 }
 .theme-options {
   display: flex;

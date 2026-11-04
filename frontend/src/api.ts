@@ -16,6 +16,8 @@ export interface Person {
   display_name: string;
   kind: string;
   permission?: string;
+  role_id?: number;
+  role_name?: string;
   enabled?: number;
 }
 export interface Task {

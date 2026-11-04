@@ -54,6 +54,7 @@ class TrackerIntegrationTest {
   @Autowired ProjectService projects;
   @Autowired AgentTokens tokens;
   @Autowired Invitations invitations;
+  @Autowired dev.forge.tracker.projects.ProjectRoles roles;
   @Autowired Access access;
   @Autowired Database db;
   @Autowired MarkdownImport importer;
@@ -99,12 +100,16 @@ class TrackerIntegrationTest {
         title, "## Scope\nBuild the feature", "FEATURE", "HIGH", "Gameplay", List.of("core"));
   }
 
+  long defaultRole(String permission) {
+    return db.one(Long.class, "SELECT id FROM project_roles WHERE project_id=? AND builtin=1 AND permission=?", project, permission);
+  }
+
   @Test
   void invitationsAreRestrictedSingleUseAndTransactional() {
-    assertThatThrownBy(() -> invitations.create(agent)).isInstanceOf(Problem.class);
-    assertThatThrownBy(() -> invitations.create(developer)).isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> invitations.create(agent, project, defaultRole("WRITE"))).isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> invitations.create(developer, project, defaultRole("WRITE"))).isInstanceOf(Problem.class);
     @SuppressWarnings("unchecked")
-    var invite = (Map<String, Object>) invitations.create(owner);
+    var invite = (Map<String, Object>) invitations.create(owner, project, defaultRole("WRITE"));
     String raw = (String) invite.get("token");
     long id = ((Number) invite.get("id")).longValue();
     assertThat(db.one(String.class, "SELECT hash FROM invitations WHERE id=?", id)).isNotEqualTo(raw);
@@ -116,7 +121,7 @@ class TrackerIntegrationTest {
     invitations.register(raw, name, "New developer", "password-123456");
     long user = db.one(Long.class, "SELECT id FROM users WHERE username=?", name);
     assertThat(db.one(String.class, "SELECT kind FROM users WHERE id=?", user)).isEqualTo("DEVELOPER");
-    assertThat(db.one(Long.class, "SELECT count(*) FROM members WHERE user_id=?", user)).isZero();
+    assertThat(db.one(Long.class, "SELECT count(*) FROM members WHERE user_id=?", user)).isEqualTo(1L);
     assertThat(db.one(Long.class, "SELECT used_by FROM invitations WHERE id=?", id)).isEqualTo(user);
     assertThatThrownBy(() -> invitations.register(raw, name + "again", "Replay", "password-123456"))
         .isInstanceOf(Problem.class);
@@ -126,15 +131,15 @@ class TrackerIntegrationTest {
   @Test
   @SuppressWarnings("unchecked")
   void revokedExpiredAndDisabledIssuerInvitationsCannotRegister() {
-    var revoked = (Map<String, Object>) invitations.create(owner);
+    var revoked = (Map<String, Object>) invitations.create(owner, project, defaultRole("WRITE"));
     invitations.revoke(owner, ((Number) revoked.get("id")).longValue());
     assertThatThrownBy(() -> invitations.register((String) revoked.get("token"), "revoked", "Revoked", "password-123456"))
         .isInstanceOf(Problem.class);
-    var expired = (Map<String, Object>) invitations.create(owner);
+    var expired = (Map<String, Object>) invitations.create(owner, project, defaultRole("WRITE"));
     db.execute("UPDATE invitations SET expires_at='2000-01-01T00:00:00Z' WHERE id=?", expired.get("id"));
     assertThatThrownBy(() -> invitations.register((String) expired.get("token"), "expired", "Expired", "password-123456"))
         .isInstanceOf(Problem.class);
-    var disabled = (Map<String, Object>) invitations.create(owner);
+    var disabled = (Map<String, Object>) invitations.create(owner, project, defaultRole("WRITE"));
     try {
       db.execute("UPDATE users SET enabled=0 WHERE id=?", owner.id());
       assertThatThrownBy(() -> invitations.register((String) disabled.get("token"), "disabled", "Disabled", "password-123456"))
@@ -148,6 +153,75 @@ class TrackerIntegrationTest {
     Task task = tasks.create(developer, project, input("A feature"));
     task = tasks.approve(owner, task.identifier(), task.version(), "APPROVED", "Looks good");
     return tasks.assign(owner, task.identifier(), task.version(), assignee.id());
+  }
+
+  @Test
+  void customProjectRolesApplyToMembersAndRemainProjectScoped() {
+    assertThat(roles.list(owner, project)).hasSize(3);
+    assertThatThrownBy(() -> roles.create(developer, project, "Lead", "MANAGE"))
+        .isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> roles.create(agent, project, "Lead", "MANAGE"))
+        .isInstanceOf(Problem.class);
+    long role = roles.create(owner, project, "Designer", "READ");
+    assertThatThrownBy(() -> roles.create(owner, project, "designer", "WRITE"))
+        .isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> roles.create(owner, project, "Administrator", "ADMIN"))
+        .isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> roles.assign(owner, isolated, developer.id(), role))
+        .isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> invitations.create(owner, isolated, role))
+        .isInstanceOf(Problem.class);
+    roles.assign(owner, project, developer.id(), role);
+    access.require(developer, project, Access.Permission.READ);
+    assertThatThrownBy(() -> tasks.create(developer, project, input("Blocked")))
+        .isInstanceOf(Problem.class);
+    roles.update(owner, project, role, "Lead designer", "MANAGE");
+    access.require(developer, project, Access.Permission.MANAGE);
+    tasks.create(developer, project, input("Allowed"));
+    assertThatThrownBy(() -> access.require(developer, project, Access.Permission.APPROVE))
+        .isInstanceOf(Problem.class);
+    roles.assign(owner, project, agent.id(), role);
+    access.require(agent, project, Access.Permission.WRITE);
+    roles.update(owner, project, role, "Designer", "READ");
+    assertThatThrownBy(() -> access.require(agent, project, Access.Permission.WRITE))
+        .isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> roles.create(agent, project, "Escalation", "WRITE"))
+        .isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> roles.update(owner, project, defaultRole("READ"), "Changed", "WRITE"))
+        .isInstanceOf(Problem.class);
+  }
+
+  @Test
+  void projectInvitationsJoinExistingAccountsAndKeepTheirCurrentRole() {
+    long role = roles.create(owner, project, "Tester", "READ");
+    var first = invitations.create(owner, project, role);
+    var result = invitations.accept(other, (String) first.get("token"));
+    assertThat(((Number) result.get("project_id")).longValue()).isEqualTo(project);
+    assertThat(db.one(String.class, "SELECT permission FROM members WHERE project_id=? AND user_id=?", project, other.id()))
+        .isEqualTo("WRITE");
+    assertThatThrownBy(() -> invitations.accept(agent, (String) first.get("token")))
+        .isInstanceOf(Problem.class);
+    long newcomer = projects.user(owner, "newcomer" + sequence, "Newcomer", "DEVELOPER", "password-123456");
+    var second = invitations.create(owner, project, role);
+    roles.update(owner, project, role, "Tester", "WRITE");
+    invitations.accept(new Actor(newcomer, "", "DEVELOPER", null, null, null), (String) second.get("token"));
+    assertThat(db.one(String.class, "SELECT permission FROM members WHERE project_id=? AND user_id=?", project, newcomer))
+        .isEqualTo("WRITE");
+    assertThat(db.one(Long.class, "SELECT count(*) FROM members WHERE project_id=? AND user_id=?", isolated, newcomer))
+        .isZero();
+    assertThatThrownBy(() -> invitations.revoke(owner, isolated, ((Number) first.get("id")).longValue()))
+        .isInstanceOf(Problem.class);
+    assertThat((List<?>) invitations.list(owner, isolated)).isEmpty();
+  }
+
+  @Test
+  void legacyInvitationRemainsRedeemableWithoutGrantingProjectAccess() {
+    String raw = "a".repeat(43);
+    db.execute("INSERT INTO invitations(hash,creator_id,created_at,expires_at) VALUES(?,?,?,?)",
+        AgentTokens.hash(raw), owner.id(), Instant.now().toString(), Instant.now().plusSeconds(3600).toString());
+    String username = "legacy" + sequence;
+    invitations.register(raw, username, "Legacy", "password-123456");
+    assertThat(db.one(Long.class, "SELECT count(*) FROM members WHERE user_id=(SELECT id FROM users WHERE username=?)", username)).isZero();
   }
 
   @Test

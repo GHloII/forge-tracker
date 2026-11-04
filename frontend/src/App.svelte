@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import Markdown from './Markdown.svelte';
+  import ProjectSettings from './ProjectSettings.svelte';
   import {
     api,
     refreshCsrf,
@@ -21,8 +22,9 @@
     error = $state(''),
     busy = $state(false);
   let invitationToken = $state(new URLSearchParams(location.hash.slice(1)).get('invite') ?? '');
-  let registrationName = $state(''), confirmation = $state('');
-  let invitations = $state<Entry[]>([]), freshInvitation = $state('');
+  let inviteSignIn = $state(false);
+  let registrationName = $state(''),
+    confirmation = $state('');
   let username = $state(''),
     password = $state('');
   let view = $state('All Issues'),
@@ -85,8 +87,6 @@
     audit = $state<Entry[]>([]),
     auditPage = $state(0);
   let userForm = $state({ username: '', displayName: '', kind: 'DEVELOPER', password: '' });
-  let memberUser = $state(''),
-    memberPermission = $state('WRITE');
   let tokenForm = $state({ user: '', project: '', name: '', permission: 'WRITE', expiresAt: '' }),
     freshToken = $state('');
   let projectForm = $state({ key: '', name: '', description: '', repository: '' }),
@@ -189,9 +189,16 @@
   async function login(event: SubmitEvent) {
     event.preventDefault();
     await run(async () => {
-      if (invitationToken) {
+      let invitedProject: number | undefined;
+      if (invitationToken && !inviteSignIn) {
         if (password !== confirmation) throw new Error('Passwords do not match.');
-        await api('/register', 'POST', { token: invitationToken, username, displayName: registrationName, password });
+        const result = await api<Entry>('/register', 'POST', {
+          token: invitationToken,
+          username,
+          displayName: registrationName,
+          password,
+        });
+        invitedProject = result.project_id;
         invitationToken = '';
         confirmation = '';
         history.replaceState(null, '', location.pathname);
@@ -200,6 +207,13 @@
       await api('/login', 'POST', new URLSearchParams({ username, password }));
       password = '';
       await refreshCsrf();
+      if (invitationToken && inviteSignIn) {
+        const result = await api<Entry>('/invitations/accept', 'POST', { token: invitationToken });
+        invitedProject = result.project_id;
+        invitationToken = '';
+        history.replaceState(null, '', location.pathname);
+      }
+      if (invitedProject) project = String(invitedProject);
       await initialize();
     });
   }
@@ -210,8 +224,6 @@
       detail = null;
       password = '';
       freshToken = '';
-      freshInvitation = '';
-      invitations = [];
       tokens = [];
       allUsers = [];
       audit = [];
@@ -235,7 +247,7 @@
       importPreview = null;
       detailSequence++;
       loadSequence++;
-      history.replaceState(null, '', location.pathname);
+      if (!invitationToken) history.replaceState(null, '', location.pathname);
       await refreshCsrf();
     });
   }
@@ -302,6 +314,28 @@
     await run(async () => {
       await loadPeople();
       await loadTasks();
+    });
+  }
+  function openProjectSettings(id: number) {
+    project = String(id);
+    view = 'Project settings';
+    closeTask();
+    void run(loadPeople);
+  }
+  async function projectSettingsUpdated() {
+    projects = await api<Project[]>('/projects');
+    await loadPeople();
+  }
+  async function acceptInvitation() {
+    await run(async () => {
+      const result = await api<Entry>('/invitations/accept', 'POST', { token: invitationToken });
+      invitationToken = '';
+      inviteSignIn = false;
+      history.replaceState(null, '', location.pathname);
+      if (result.project_id) project = String(result.project_id);
+      view = 'All Issues';
+      await initialize();
+      notify('Invitation accepted');
     });
   }
   let searchTimer: ReturnType<typeof setTimeout>;
@@ -486,11 +520,10 @@
   }
   async function loadSettings() {
     if (!owner) return;
-    [allUsers, tokens, audit, invitations] = await Promise.all([
+    [allUsers, tokens, audit] = await Promise.all([
       api<Person[]>('/users'),
       api<Entry[]>('/tokens'),
       api<Entry[]>(`/audit?page=${auditPage}`),
-      api<Entry[]>('/invitations'),
     ]);
   }
   async function createUser(event: SubmitEvent) {
@@ -500,17 +533,6 @@
       userForm = { username: '', displayName: '', kind: 'DEVELOPER', password: '' };
       await loadSettings();
       notify('Participant created');
-    });
-  }
-  async function saveMember(event: SubmitEvent) {
-    event.preventDefault();
-    await run(async () => {
-      await api(`/projects/${project}/members`, 'POST', {
-        user: Number(memberUser),
-        permission: memberPermission,
-      });
-      await loadPeople();
-      notify('Project access updated');
     });
   }
   async function createToken(event: SubmitEvent) {
@@ -670,25 +692,91 @@
   <main class="login">
     <form onsubmit={login}>
       <div class="brand-mark">f</div>
-      <h1>{invitationToken ? 'Join Forge' : 'Welcome to Forge'}</h1>
+      <h1>{invitationToken && !inviteSignIn ? 'Join Forge' : 'Welcome to Forge'}</h1>
       <p class="muted">A clear path from proposal to shipped.</p>
-      {#if invitationToken}<label>Display name<input bind:value={registrationName} maxlength="100" required /></label>{/if}
-      <label>Username<input bind:value={username} autocomplete="username" pattern={'[A-Za-z0-9_.-]{1,40}'} required /></label><label
+      {#if invitationToken && !inviteSignIn}<label
+          >Display name<input bind:value={registrationName} maxlength="100" required /></label
+        >{/if}
+      <label
+        >Username<input
+          bind:value={username}
+          autocomplete="username"
+          pattern={'[A-Za-z0-9_.-]{1,40}'}
+          required
+        /></label
+      ><label
         >Password<input
           bind:value={password}
           type="password"
-          autocomplete={invitationToken ? 'new-password' : 'current-password'}
-          minlength={invitationToken ? 12 : undefined}
+          autocomplete={invitationToken && !inviteSignIn ? 'new-password' : 'current-password'}
+          minlength={invitationToken && !inviteSignIn ? 12 : undefined}
           required
         /></label
       >
-      {#if invitationToken}<label>Confirm password<input type="password" bind:value={confirmation} autocomplete="new-password" required /></label>{/if}
+      {#if invitationToken && !inviteSignIn}<label
+          >Confirm password<input
+            type="password"
+            bind:value={confirmation}
+            autocomplete="new-password"
+            required
+          /></label
+        >{/if}
       {#if error}<div class="error">{error}</div>{/if}<button class="primary" disabled={busy}
-        >{invitationToken ? 'Create account' : 'Sign in'} <span>→</span></button
+        >{invitationToken
+          ? inviteSignIn
+            ? 'Sign in & accept invitation'
+            : 'Create account & join'
+          : 'Sign in'} <span>→</span></button
       >
-      <p class="fine">{invitationToken ? 'Single-use invitation. Your owner will grant project access.' : 'Ask your workspace owner for an invitation to create an account.'}</p>
-      {#if invitationToken}<button type="button" onclick={() => { invitationToken = ''; history.replaceState(null, '', location.pathname); error = ''; }}>Back to sign in</button>{/if}
+      <p class="fine">
+        {invitationToken
+          ? 'Single-use invitation. Project access is granted when you join.'
+          : 'Ask your workspace owner for an invitation to create an account.'}
+      </p>
+      {#if invitationToken}<button
+          type="button"
+          onclick={() => {
+            inviteSignIn = !inviteSignIn;
+            error = '';
+            password = '';
+            confirmation = '';
+          }}
+          >{inviteSignIn
+            ? 'Create a new account instead'
+            : 'Already have an account? Sign in'}</button
+        >
+        <button
+          type="button"
+          onclick={() => {
+            invitationToken = '';
+            inviteSignIn = false;
+            history.replaceState(null, '', location.pathname);
+            error = '';
+          }}>Back to sign in</button
+        >{/if}
     </form>
+  </main>
+{:else if invitationToken}
+  <main class="login">
+    <div class="invitation-card">
+      <div class="brand-mark">f</div>
+      <h1>Join a project</h1>
+      <p class="muted">
+        Accept this invitation as @{me.username}. Your role applies to the invited project only. If
+        you already belong to it, your current role is kept.
+      </p>
+      {#if error}<div class="error" role="alert">{error}</div>{/if}
+      <button class="primary" disabled={busy} onclick={acceptInvitation}>Accept invitation</button>
+      <button disabled={busy} onclick={logout}>Use a different account</button>
+      <button
+        disabled={busy}
+        onclick={() => {
+          invitationToken = '';
+          history.replaceState(null, '', location.pathname);
+          error = '';
+        }}>Back to workspace</button
+      >
+    </div>
   </main>
 {:else}
   <div class="app-shell">
@@ -721,18 +809,32 @@
         class:chosen={!project}
         onclick={() => {
           project = '';
+          if (view === 'Project settings') view = 'All Issues';
           void changeProject();
         }}><span class="project-glyph">▦</span>All projects</button
       >
-      {#each projects as item}<button
-          class="project-nav"
+      {#each projects as item}<div
+          class="project-nav-row"
           class:chosen={project === String(item.id)}
-          onclick={() => {
-            project = String(item.id);
-            if (['Settings', 'Projects', 'Inbox'].includes(view)) view = 'All Issues';
-            void changeProject();
-          }}><span class="project-glyph">{item.key.slice(0, 1)}</span>{item.name}</button
-        >{/each}
+        >
+          <button
+            class="project-nav"
+            class:chosen={project === String(item.id)}
+            onclick={() => {
+              project = String(item.id);
+              if (['Settings', 'Projects', 'Inbox', 'Project settings'].includes(view))
+                view = 'All Issues';
+              void changeProject();
+            }}><span class="project-glyph">{item.key.slice(0, 1)}</span>{item.name}</button
+          >{#if owner}<button
+              class="project-settings-button icon-button"
+              class:active={project === String(item.id) && view === 'Project settings'}
+              aria-label={`Settings for ${item.name}`}
+              title={`Settings for ${item.name}`}
+              disabled={busy}
+              onclick={() => openProjectSettings(item.id)}>⚙</button
+            >{/if}
+        </div>{/each}
       <div class="sidebar-bottom">
         <button onclick={() => navigate('Settings')} class:active={view === 'Settings'}
           ><span class="nav-icon">⚙</span>Settings</button
@@ -780,9 +882,11 @@
                   ? 'Keep the work connected to its context.'
                   : view === 'Settings'
                     ? 'Your workspace, people and integrations.'
-                    : view === 'My Issues'
-                      ? 'Your next steps, all in one place.'
-                      : 'Everything your team is moving forward.'}
+                    : view === 'Project settings'
+                      ? 'Manage this project, its members, invitations and roles.'
+                      : view === 'My Issues'
+                        ? 'Your next steps, all in one place.'
+                        : 'Everything your team is moving forward.'}
           </p>
         </div>
         {#if ['All Issues', 'Board'].includes(view)}<div class="view-switch">
@@ -1076,7 +1180,8 @@
                     >{p.repository.replace('https://github.com/', '')} ↗</a
                   >{/if}
               </div>
-              {#if owner}<button onclick={() => projectEditor(p)}>Edit project</button>{/if}
+              {#if owner}<button onclick={() => openProjectSettings(p.id)}>Project settings</button
+                >{/if}
             </article>{/each}
         </div>
         {#if !projects.length}<div class="empty">
@@ -1091,9 +1196,14 @@
                 >Create project</button
               >{/if}
           </div>{/if}
+      {:else if view === 'Project settings' && currentProject && owner}
+        {#key currentProject.id}<ProjectSettings
+            project={currentProject}
+            onUpdated={projectSettingsUpdated}
+          />{/key}
       {:else if view === 'Settings'}
         <div class="settings-tabs">
-          {#each owner ? ['Account', 'People', 'Project access', 'Agent tokens', 'Audit log'] : ['Account'] as section}<button
+          {#each owner ? ['Account', 'People', 'Agent tokens', 'Audit log'] : ['Account'] as section}<button
               class:active={settingsTab === section}
               onclick={() => (settingsTab = section)}>{section}</button
             >{/each}
@@ -1143,25 +1253,6 @@
               </form>
             </section>
           {:else if settingsTab === 'People'}<section>
-              <h2>Invite a developer</h2>
-              <p class="muted">Single-use link, valid for 7 days. Grant project access after registration.</p>
-              <button disabled={busy} onclick={() => run(async () => {
-                const result = await api<Entry>('/invitations', 'POST');
-                freshInvitation = `${location.origin}/#invite=${result.token}`;
-                await loadSettings();
-              })}>Create invitation link</button>
-              {#if freshInvitation}<label>Copy this link now<input readonly value={freshInvitation} onclick={(event) => event.currentTarget.select()} /></label>
-                <button onclick={() => run(async () => { await navigator.clipboard.writeText(freshInvitation); notify('Invitation copied'); })}>Copy link</button>{/if}
-              <div class="member-list">{#each invitations as invite}<div>
-                <strong>Invitation #{invite.id}</strong>
-                <span class="muted">Expires {new Date(invite.expires_at).toLocaleString()}</span>
-                <span>{invite.used_by ? 'Accepted' : invite.revoked ? 'Revoked' : Date.parse(invite.expires_at) <= Date.now() ? 'Expired' : 'Pending'}</span>
-                {#if !invite.used_by && !invite.revoked && Date.parse(invite.expires_at) > Date.now()}<button disabled={busy} onclick={() => run(async () => {
-                  await api(`/invitations/${invite.id}`, 'DELETE');
-                  await loadSettings();
-                })}>Revoke</button>{/if}
-              </div>{/each}</div>
-            </section><section>
               <h2>People & agents</h2>
               <div class="member-list">
                 {#each allUsers as user}<div>
@@ -1212,41 +1303,6 @@
                     /></label
                   >{/if}<button disabled={busy}>Create participant</button>
               </form>
-            </section>
-          {:else if settingsTab === 'Project access'}<section>
-              <h2>Project participants</h2>
-              <p class="muted">
-                Owners have access to every project. Other participants need an explicit permission.
-              </p>
-              <form class="settings-form" onsubmit={saveMember}>
-                <label
-                  >Project<select bind:value={project} onchange={changeProject} required
-                    ><option value="">Select project</option>{#each projects as p}<option
-                        value={p.id}>{p.name}</option
-                      >{/each}</select
-                  ></label
-                ><label
-                  >Participant<select bind:value={memberUser} required
-                    ><option value="">Select participant</option
-                    >{#each allUsers.filter((u) => u.kind !== 'OWNER') as user}<option
-                        value={user.id}>{user.display_name} · {label(user.kind)}</option
-                      >{/each}</select
-                  ></label
-                ><label
-                  >Permission<select bind:value={memberPermission}
-                    ><option value="READ">Read</option><option value="WRITE"
-                      >Write / claim own work</option
-                    ><option value="MANAGE">Manage all project tasks</option><option value="REMOVE"
-                      >Remove access</option
-                    ></select
-                  ></label
-                ><button disabled={busy || !project}>Save access</button>
-              </form>
-              {#if project}<div class="member-list">
-                  {#each people as p}<div>
-                      <strong>{p.display_name}</strong><span>{p.permission}</span>
-                    </div>{/each}
-                </div>{/if}
             </section>
           {:else if settingsTab === 'Agent tokens'}<section>
               <h2>MCP access</h2>

@@ -45,8 +45,10 @@ public class ProjectService {
   public List<Map<String, Object>> participants(Actor actor, long id) {
     access.require(actor, id, Access.Permission.READ);
     return db.rows(
-        "SELECT u.id,u.username,u.display_name,u.kind,coalesce(m.permission,'MANAGE') AS permission"
-            + " FROM users u LEFT JOIN members m ON m.user_id=u.id AND m.project_id=? WHERE"
+        "SELECT u.id,u.username,u.display_name,u.kind,coalesce(m.permission,'MANAGE') AS permission,"
+            + " m.role_id,coalesce(r.name,CASE WHEN u.kind='OWNER' THEN 'Workspace owner' ELSE m.permission END) AS role_name"
+            + " FROM users u LEFT JOIN members m ON m.user_id=u.id AND m.project_id=?"
+            + " LEFT JOIN project_roles r ON r.id=m.role_id WHERE"
             + " u.enabled=1 AND (u.kind='OWNER' OR m.user_id IS NOT NULL) ORDER BY u.display_name"
             + " LIMIT 100",
         id);
@@ -102,10 +104,13 @@ public class ProjectService {
       db.execute("DELETE FROM members WHERE project_id=? AND user_id=?", project, user);
     else
       db.execute(
-          "INSERT INTO members(project_id,user_id,permission) VALUES(?,?,?) ON"
-              + " CONFLICT(project_id,user_id) DO UPDATE SET permission=excluded.permission",
+          "INSERT INTO members(project_id,user_id,permission,role_id) VALUES(?,?,?,"
+              + " (SELECT id FROM project_roles WHERE project_id=? AND builtin=1 AND permission=?)) ON"
+              + " CONFLICT(project_id,user_id) DO UPDATE SET permission=excluded.permission,role_id=excluded.role_id",
           project,
           user,
+          permission,
+          project,
           permission);
   }
 

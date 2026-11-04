@@ -35,7 +35,7 @@ The container runs as an unprivileged user with a 512 MiB memory limit. Its heal
 
 1. Create a project with a permanent key, such as `GAME`, and an optional GitHub repository.
 2. Add developers and agents under **Settings → People**.
-3. Grant each participant project access under **Project access**.
+3. Open the gear beside a project in the sidebar. Under **Members**, add existing participants and assign a project role; under **Invitations**, invite new or existing users directly to that project.
 4. Create proposals. All tasks start in **Backlog / Pending**.
 5. Review them in **Approvals**, then assign or claim approved work and move it to Ready.
 6. The assignee starts work, comments and links a PR, then submits it to In Review. A human owner accepts the implementation as Done or requests more work.
@@ -101,12 +101,25 @@ The integration suite exercises real SQLite migrations, competing writes, permis
 Measured locally on Windows with Java 21 and `-Xms64m -Xmx320m`: initial startup 5.06 seconds, approximately 213 MiB working set and 254 MiB private memory after several interactive operations. The application JAR was approximately 44.2 MiB; the frontend JavaScript approximately 59 KB gzip. These observations describe a small local workload; measure your own container under its expected load.
 
 Docker verification with one CPU and a 512 MiB limit measured a 12.1-second first startup and approximately 181 MiB after the HTTP smoke test. Caddy configuration validation, a smoke test through a local Caddy reverse proxy and data verification after container restart passed. Public-domain certificate issuance requires deployment with working DNS and reachable ACME ports.
-# Invitation registration
+## Project settings, roles and invitations
 
-Owners can create invitation links in **Settings → People → Create invitation link**.
-Copy the link when it appears and send it to the intended participant. Each link
-expires after seven days, works once, and can be revoked from the same screen.
-The participant chooses a username, display name and password, then signs in
-automatically. New accounts are developers; owners grant their project permissions
-separately in **Settings → Project access**. Invitation secrets are stored only as
-SHA-256 hashes and are never returned by the invitation list.
+Owners open project settings using the gear beside the project name in the sidebar
+or the **Project settings** button in the project list. Tabs cover **General**,
+**Members**, **Invitations** and **Roles**. Workspace account and agent administration
+remain under the global **Settings** menu.
+
+Each project starts with Viewer (READ), Developer (WRITE) and Manager (MANAGE) roles.
+Owners can create and edit custom roles with their own names and one of those
+permission levels. Role changes immediately update current members, including agent
+access, and affect pending invitations. MANAGE permits task management; it never
+grants approval, invitation, role management or workspace administration rights.
+
+Create a link under **Project settings → Invitations**, choosing a project role.
+Copy it when it appears. Links expire after seven days, work once and can be revoked.
+Recipients can register or sign in to an existing account; accepting adds them to
+the invited project. Existing project members keep their current role. New accounts
+are developers and receive no access to other projects. Invitation secrets are stored
+only as SHA-256 hashes and are never returned by invitation lists.
+
+The migration preserves existing project permissions and old workspace invitation
+links. Those older links still create an account without assigning project access.
