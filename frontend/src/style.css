@@ -2194,3 +2194,22 @@ time {
 }
 .compact-issues .row-actions,
 .compact-issues .table-head > span:last-child { grid-column: 9; }
+
+.compact-issues .row-open > .row-date { grid-column: 8; }
+.compact-issues .row-assignee {
+  grid-column: 7;
+  min-width: 0;
+  padding: 4px 3px;
+}
+.row-assignee select {
+  width: 100%; min-width: 0; padding: 5px 4px;
+  background: transparent; border-color: transparent;
+  font-size: 10px; text-overflow: ellipsis; color: var(--muted);
+}
+.row-assignee select:not(:disabled):hover, .row-assignee select:focus-visible {
+  border-color: var(--border); background: var(--field); color: var(--text);
+}
+.row-assignee select:disabled { opacity: 1; cursor: default; }
+
+.compact-issues .row-assignee,
+.compact-issues .issue-row > .row-actions { grid-row: 1; }

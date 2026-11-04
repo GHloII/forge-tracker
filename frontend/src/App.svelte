@@ -31,6 +31,7 @@
     project = $state(''),
     projects = $state<Project[]>([]),
     people = $state<Person[]>([]);
+  let projectPeople = $state<Record<number, Person[]>>({});
   let tasks = $state<Task[]>([]),
     total = $state(0),
     page = $state(0),
@@ -129,14 +130,38 @@
   };
   let currentProject = $derived(projects.find((p) => String(p.id) === project));
   let owner = $derived(me?.kind === 'OWNER');
-  let canManage = $derived(owner || people.find((p) => p.id === me?.id)?.permission === 'MANAGE');
+  let canManage = $derived(managesProject(task?.projectId ?? Number(project)));
   let canWrite = $derived(
-    owner || ['WRITE', 'MANAGE'].includes(people.find((p) => p.id === me?.id)?.permission ?? ''),
+    writesProject(task?.projectId ?? Number(project)),
   );
   let canEdit = $derived(
     canWrite && (canManage || task?.creatorId === me?.id || task?.assigneeId === me?.id),
   );
 
+  function managesProject(id: number) {
+    return owner || projectPeople[id]?.find((p) => p.id === me?.id)?.permission === 'MANAGE';
+  }
+  function writesProject(id: number) {
+    return owner || ['WRITE', 'MANAGE'].includes(projectPeople[id]?.find((p) => p.id === me?.id)?.permission ?? '');
+  }
+  function assignablePeople(id: number) {
+    return (projectPeople[id] ?? []).filter((p) => p.kind === 'OWNER' || ['WRITE', 'MANAGE'].includes(p.permission ?? ''));
+  }
+  function canAssignRow(item: Task) {
+    return !item.archived && (managesProject(item.projectId) ||
+      (writesProject(item.projectId) && !item.assigneeId && item.approval === 'APPROVED'));
+  }
+  async function assignRow(item: Task, assignee: string) {
+    await run(async () => {
+      try {
+        await api(`/tasks/${item.identifier}/assign`, 'POST', { version: item.version, assignee: assignee ? Number(assignee) : null });
+      } finally {
+        await loadTasks();
+        if (task?.identifier === item.identifier) detail = await api(`/tasks/${item.identifier}`);
+      }
+      notify(assignee ? 'Assignee updated' : 'Issue unassigned');
+    });
+  }
   async function run(action: () => Promise<void>) {
     if (busy) return;
     busy = true;
@@ -154,7 +179,7 @@
     setTimeout(() => (toast = ''), 3500);
   }
   function name(id: number | null) {
-    return people.find((p) => p.id === id)?.display_name ?? (id ? `User ${id}` : 'Unassigned');
+    return (people.find((p) => p.id === id) ?? Object.values(projectPeople).flat().find((p) => p.id === id))?.display_name ?? (id ? `User ${id}` : 'Unassigned');
   }
   function date(value: string) {
     return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -230,6 +255,7 @@
       allUsers = [];
       audit = [];
       people = [];
+      projectPeople = {};
       projects = [];
       tasks = [];
       notifications = [];
@@ -255,13 +281,16 @@
   }
   async function loadPeople() {
     const actorId = me?.id;
-    if (project) {
-      const data = await api<Entry>(`/projects/${project}`);
-      if (me?.id !== actorId) return;
+    const selectedProject = project;
+    if (selectedProject) {
+      const data = await api<Entry>(`/projects/${selectedProject}`);
+      if (me?.id !== actorId || project !== selectedProject) return;
+      projectPeople[Number(selectedProject)] = data.participants;
       people = data.participants;
     } else {
       const contexts = await Promise.all(projects.map((p) => api<Entry>(`/projects/${p.id}`)));
-      if (me?.id !== actorId) return;
+      if (me?.id !== actorId || project !== selectedProject) return;
+      projectPeople = Object.fromEntries(contexts.map((c) => [c.project.id, c.participants]));
       people = [
         ...new Map(contexts.flatMap((c) => c.participants).map((p: Person) => [p.id, p])).values(),
       ] as Person[];
@@ -369,6 +398,7 @@
       activityPage = 0;
       const context = await api<Entry>(`/projects/${data.task.projectId}`);
       if (me?.id !== actorId || sequence !== detailSequence) return;
+      projectPeople[data.task.projectId] = context.participants;
       people = context.participants;
       await loadDiscussion();
       if (sequence !== detailSequence) return;
@@ -475,7 +505,7 @@
       await api(`/tasks/${item.identifier}/subscription`, 'POST', { subscribed: !item.subscribed });
       await loadTasks();
       if (task?.identifier === item.identifier) detail = await api(`/tasks/${item.identifier}`);
-      notify(item.subscribed ? 'Unfollowed issue' : 'Following progress and completion');
+      notify(item.subscribed ? 'Issue notifications off' : 'Issue notifications on');
     });
   }
   async function startRowReview(item: Task, decision: string) {
@@ -983,7 +1013,7 @@
                 page = 0;
                 void run(loadTasks);
               }}
-            />Following</label
+            />Notifications</label
           ><label class="check-filter"
             ><input
               type="checkbox"
@@ -1060,16 +1090,25 @@
                   </span>
                   <span class="status-cell"><span class="status-dot" style:background={colors[item.status]}></span><span>{label(item.status)}</span></span>
                   <span class="person-cell creator-cell" title={`Author: ${name(item.creatorId)}`}><span class="avatar tiny">{name(item.creatorId).slice(0, 2)}</span><span>{name(item.creatorId)}</span></span>
-                  <span class="person-cell assignee-cell" title={`Assignee: ${name(item.assigneeId)}`}><span class="avatar tiny">{item.assigneeId ? name(item.assigneeId).slice(0, 2) : '–'}</span><span>{name(item.assigneeId)}</span></span>
                   <span class="row-date">{date(view === 'Approvals' ? item.createdAt : item.updatedAt)}</span>
                 </button>
+                <div class="person-cell row-assignee">
+                  <select aria-label={`Assign ${item.identifier}`} title={`Assignee: ${name(item.assigneeId)}`}
+                    disabled={busy || !canAssignRow(item)} value={item.assigneeId == null ? '' : String(item.assigneeId)}
+                    onchange={(event) => assignRow(item, event.currentTarget.value)}>
+                    <option value="">Unassigned</option>
+                    {#each assignablePeople(item.projectId).filter((p) => managesProject(item.projectId) || p.id === me?.id || p.id === item.assigneeId) as person}
+                      <option value={String(person.id)}>{person.display_name}{person.kind === 'AGENT' ? ' · Agent' : ''}</option>
+                    {/each}
+                  </select>
+                </div>
                 <div class="row-actions">
                   {#if item.approval === 'PENDING' && owner && !item.archived}
                     <button class="quick-approve" disabled={busy} title={`Approve ${item.identifier}`} aria-label={`Approve ${item.identifier}`} onclick={() => { rowFeedback = ''; void reviewRow(item, 'APPROVED'); }}>✓ <span>Approve</span></button>
                     <button disabled={busy} title={`Request changes to ${item.identifier}`} aria-label={`Request changes to ${item.identifier}`} onclick={() => startRowReview(item, 'CHANGES_REQUESTED')}>↺</button>
                     <button class="danger-text" disabled={busy} title={`Reject ${item.identifier}`} aria-label={`Reject ${item.identifier}`} onclick={() => startRowReview(item, 'REJECTED')}>×</button>
                   {/if}
-                  <button class:following={item.subscribed} disabled={busy} aria-pressed={item.subscribed} title={item.subscribed ? 'Unfollow issue' : 'Follow progress and completion'} aria-label={`${item.subscribed ? 'Unfollow' : 'Follow'} ${item.identifier}`} onclick={() => followRow(item)}>{item.subscribed ? '◉' : '◎'}</button>
+                  <button class:following={item.subscribed} disabled={busy} aria-pressed={item.subscribed} title={item.subscribed ? 'Stop notifications for this issue' : 'Get progress and completion notifications'} aria-label={`${item.subscribed ? 'Stop notifications for' : 'Notify me about'} ${item.identifier}`} onclick={() => followRow(item)}>{item.subscribed ? '◉' : '◎'}</button>
                 </div>
               </div>
               {#if rowReview?.identifier === item.identifier}
@@ -1152,7 +1191,7 @@
         {#if !notifications.length}<div class="empty">
             <div class="empty-symbol">◫</div>
             <h2>You're all caught up</h2>
-            <p>Follow issues to receive updates here.</p>
+            <p>Turn on issue notifications to receive updates here.</p>
           </div>{/if}
         <div class="pagination">
           <button
@@ -1429,7 +1468,7 @@
           <span class="tag">{label(task.type)}</span><button
             disabled={busy}
             onclick={() => taskAction('subscription', { subscribed: !detail!.subscribed })}
-            >{detail!.subscribed ? '◉ Following' : '◎ Follow'}</button
+            >{detail!.subscribed ? '◉ Notifications on' : '◎ Notify me'}</button
           >{#if canManage}<button
               disabled={busy}
               onclick={() => taskAction('archive', { archived: !task!.archived })}
@@ -1493,14 +1532,14 @@
             ><span>Assignee</span><select
               aria-label="Issue assignee"
               disabled={busy || task.archived || !canManage}
-              value={task.assigneeId ?? ''}
+              value={task.assigneeId == null ? '' : String(task.assigneeId)}
               onchange={(e) =>
                 taskAction('assign', {
                   assignee: e.currentTarget.value ? Number(e.currentTarget.value) : null,
                 })}
               ><option value="">Unassigned</option
               >{#each people.filter((p) => p.kind === 'OWNER' || ['WRITE', 'MANAGE'].includes(p.permission ?? '')) as p}<option
-                  value={p.id}>{p.display_name}{p.kind === 'AGENT' ? ' · Agent' : ''}</option
+                  value={String(p.id)}>{p.display_name}{p.kind === 'AGENT' ? ' · Agent' : ''}</option
                 >{/each}</select
             >{#if !task.assigneeId && task.approval === 'APPROVED' && canWrite}<span></span><button
                 disabled={busy}

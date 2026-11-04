@@ -432,6 +432,33 @@ class TrackerIntegrationTest {
   }
 
   @Test
+  void projectManagersCanAssignOthersWithoutGainingApprovalOrCrossProjectAccess() throws Exception {
+    long leadRole = roles.create(owner, project, "Team lead", "MANAGE");
+    roles.assign(owner, project, developer.id(), leadRole);
+    Task proposal = tasks.create(other, project, input("Managed assignment"));
+    String response = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/tasks/" + proposal.identifier() + "/assign")
+        .contentType("application/json")
+        .content(json.writeValueAsString(Map.of("version", proposal.version(), "assignee", other.id())))
+        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user(developer.username()))
+        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()))
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+        .andReturn().getResponse().getContentAsString();
+    Task assigned = json.readValue(response, Task.class);
+    assertThat(assigned.assigneeId()).isEqualTo(other.id());
+    assertThat(assigned.approval()).isEqualTo("PENDING");
+    assertThatThrownBy(() -> tasks.assign(developer, proposal.identifier(), proposal.version(), agent.id())).isInstanceOf(Problem.class);
+    Task reassigned = tasks.assign(developer, proposal.identifier(), assigned.version(), agent.id());
+    Task unassigned = tasks.assign(developer, proposal.identifier(), reassigned.version(), null);
+    assertThat(unassigned.assigneeId()).isNull();
+    assertThatThrownBy(() -> tasks.assign(other, proposal.identifier(), unassigned.version(), developer.id())).isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> tasks.approve(developer, proposal.identifier(), unassigned.version(), "APPROVED", "")).isInstanceOf(Problem.class);
+    Task privateTask = tasks.create(owner, isolated, input("Other project"));
+    assertThatThrownBy(() -> tasks.assign(developer, privateTask.identifier(), privateTask.version(), other.id())).isInstanceOf(Problem.class);
+    roles.update(owner, project, leadRole, "Team lead", "READ");
+    assertThatThrownBy(() -> tasks.assign(developer, proposal.identifier(), unassigned.version(), other.id())).isInstanceOf(Problem.class);
+  }
+
+  @Test
   void issueListIncludesActorSpecificSubscriptionsAndBothPeople() throws Exception {
     Task proposal = tasks.create(developer, project, input("List review proposal"));
     tasks.create(owner, isolated, input("Private proposal"));
