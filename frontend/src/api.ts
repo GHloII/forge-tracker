@@ -34,6 +34,7 @@ export interface Task {
   assigneeId: number | null;
   category: string;
   labels: string;
+  subscribed: boolean;
   archived: boolean;
   version: number;
   revision: number;

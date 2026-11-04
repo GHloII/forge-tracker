@@ -43,6 +43,8 @@
   let selected = $state<Set<string>>(new Set()),
     focusIndex = $state(0),
     searchInput = $state<HTMLInputElement>();
+  let rowReview = $state<{ identifier: string; decision: string } | null>(null);
+  let rowFeedback = $state('');
   let revisionPreview = $state<Entry | null>(null);
   let detail = $state<Entry | null>(null),
     task = $derived<Task | null>(detail?.task ?? null),
@@ -286,6 +288,7 @@
     tasks = result.items;
     total = result.total;
     selected = new Set();
+    rowReview = null;
     focusIndex = 0;
   }
   async function loadNotifications() {
@@ -449,6 +452,37 @@
       await loadTasks();
       if (task?.identifier === item.identifier) await refreshTask();
     });
+  }
+  async function reviewRow(item: Task, decision: string) {
+    await run(async () => {
+      try {
+        await api(`/tasks/${item.identifier}/approval`, 'POST', {
+          version: item.version, decision, comment: rowFeedback,
+        });
+      } catch (failure) {
+        await loadTasks();
+        throw failure;
+      }
+      rowReview = null;
+      rowFeedback = '';
+      await Promise.all([loadTasks(), loadNotifications()]);
+      if (task?.identifier === item.identifier) await refreshTask();
+      notify(decision === 'APPROVED' ? 'Proposal approved' : decision === 'REJECTED' ? 'Proposal rejected' : 'Changes requested');
+    });
+  }
+  async function followRow(item: Task) {
+    await run(async () => {
+      await api(`/tasks/${item.identifier}/subscription`, 'POST', { subscribed: !item.subscribed });
+      await loadTasks();
+      if (task?.identifier === item.identifier) detail = await api(`/tasks/${item.identifier}`);
+      notify(item.subscribed ? 'Unfollowed issue' : 'Following progress and completion');
+    });
+  }
+  async function startRowReview(item: Task, decision: string) {
+    rowReview = { identifier: item.identifier, decision };
+    rowFeedback = '';
+    await tick();
+    document.getElementById(`feedback-${item.id}`)?.focus();
   }
   function openCreate() {
     createProject = project || String(projects[0]?.id ?? '');
@@ -634,6 +668,7 @@
   }
   function keyboard(event: KeyboardEvent) {
     if (event.key === 'Escape') {
+      if (rowReview) { rowReview = null; return; }
       createOpen = false;
       shortcuts = false;
       projectFormOpen = false;
@@ -658,6 +693,7 @@
       focusIndex = Math.max(focusIndex - 1, 0);
       document.getElementById(`row-${focusIndex}`)?.scrollIntoView({ block: 'nearest' });
     }
+    if ((event.target as HTMLElement).closest('button,a') && event.key === 'Enter') return;
     if (event.key === 'Enter' && tasks[focusIndex] && !detail)
       void openTask(tasks[focusIndex].identifier);
   }
@@ -909,7 +945,7 @@
             /><kbd>/</kbd>
           </div>
           <select aria-label="Project" bind:value={project} onchange={changeProject}
-            ><option value="">All projects</option>{#each projects as p}<option value={p.id}
+            ><option value="">All projects</option>{#each projects as p}<option value={String(p.id)}
                 >{p.name}</option
               >{/each}</select
           >
@@ -1006,60 +1042,45 @@
               </section>{/each}
           </div>
         {:else}
-          <div class="issue-table">
+          <div class="issue-table compact-issues">
             <div class="table-head">
-              <span></span><span>Priority</span><span>Issue</span><span class="grow">Title</span
-              ><span>Status</span><span>{view === 'Approvals' ? 'Author' : 'Assignee'}</span><span
-                >{view === 'Approvals' ? 'Submitted' : 'Updated'}</span
-              >
+              <span></span><span>Pri</span><span>Issue</span><span>Title</span>
+              <span>Status</span><span>Author</span><span>Assignee</span>
+              <span>{view === 'Approvals' ? 'Submitted' : 'Updated'}</span><span>Actions</span>
             </div>
-            {#each tasks as item, i}<div
-                class="issue-row"
-                class:focused={focusIndex === i}
-                class:selected={selected.has(item.identifier)}
-                id={`row-${i}`}
-              >
-                <div class="select-cell">
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${item.identifier}`}
-                    checked={selected.has(item.identifier)}
-                    onchange={() => toggleSelect(item.identifier)}
-                  />
+            {#each tasks as item, i (item.identifier)}
+              <div class="issue-row" class:focused={focusIndex === i} class:selected={selected.has(item.identifier)} id={`row-${i}`}>
+                <div class="select-cell"><input type="checkbox" aria-label={`Select ${item.identifier}`} checked={selected.has(item.identifier)} onchange={() => toggleSelect(item.identifier)} /></div>
+                <button class="row-open" onclick={() => { focusIndex = i; void openTask(item.identifier); }} aria-label={`Open ${item.identifier}: ${item.title}`}>
+                  <span class="priority" data-priority={item.priority} title={label(item.priority)}>{item.priority === 'URGENT' ? '!' : item.priority === 'NONE' ? '–' : '≡'}</span>
+                  <span class="issue-id">{item.identifier}</span>
+                  <span class="issue-title" title={item.title}><strong>{item.title}</strong>
+                    {#each labels(item.labels).slice(0, 1) as tag}<span class="tag">{tag}</span>{/each}
+                    {#if item.approval === 'PENDING' && view !== 'Approvals'}<span class="approval-tag">◇ Pending</span>{/if}
+                  </span>
+                  <span class="status-cell"><span class="status-dot" style:background={colors[item.status]}></span><span>{label(item.status)}</span></span>
+                  <span class="person-cell creator-cell" title={`Author: ${name(item.creatorId)}`}><span class="avatar tiny">{name(item.creatorId).slice(0, 2)}</span><span>{name(item.creatorId)}</span></span>
+                  <span class="person-cell assignee-cell" title={`Assignee: ${name(item.assigneeId)}`}><span class="avatar tiny">{item.assigneeId ? name(item.assigneeId).slice(0, 2) : '–'}</span><span>{name(item.assigneeId)}</span></span>
+                  <span class="row-date">{date(view === 'Approvals' ? item.createdAt : item.updatedAt)}</span>
+                </button>
+                <div class="row-actions">
+                  {#if item.approval === 'PENDING' && owner && !item.archived}
+                    <button class="quick-approve" disabled={busy} title={`Approve ${item.identifier}`} aria-label={`Approve ${item.identifier}`} onclick={() => { rowFeedback = ''; void reviewRow(item, 'APPROVED'); }}>✓ <span>Approve</span></button>
+                    <button disabled={busy} title={`Request changes to ${item.identifier}`} aria-label={`Request changes to ${item.identifier}`} onclick={() => startRowReview(item, 'CHANGES_REQUESTED')}>↺</button>
+                    <button class="danger-text" disabled={busy} title={`Reject ${item.identifier}`} aria-label={`Reject ${item.identifier}`} onclick={() => startRowReview(item, 'REJECTED')}>×</button>
+                  {/if}
+                  <button class:following={item.subscribed} disabled={busy} aria-pressed={item.subscribed} title={item.subscribed ? 'Unfollow issue' : 'Follow progress and completion'} aria-label={`${item.subscribed ? 'Unfollow' : 'Follow'} ${item.identifier}`} onclick={() => followRow(item)}>{item.subscribed ? '◉' : '◎'}</button>
                 </div>
-                <button
-                  class="row-open"
-                  onclick={() => {
-                    focusIndex = i;
-                    void openTask(item.identifier);
-                  }}
-                  ><span class="priority" data-priority={item.priority} title={label(item.priority)}
-                    >{item.priority === 'URGENT' ? '!' : item.priority === 'NONE' ? '–' : '≡'}</span
-                  ><span class="issue-id">{item.identifier}</span><span class="issue-title"
-                    ><strong>{item.title}</strong
-                    >{#each labels(item.labels).slice(0, 2) as tag}<span class="tag">{tag}</span
-                      >{/each}{#if item.approval === 'PENDING'}<span class="approval-tag"
-                        >◇ Review needed</span
-                      >{/if}</span
-                  ><span class="status-cell"
-                    ><span class="status-dot" style:background={colors[item.status]}></span>{label(
-                      item.status,
-                    )}</span
-                  ><span class="assignee-cell"
-                    ><span
-                      class="avatar tiny"
-                      title={name(view === 'Approvals' ? item.creatorId : item.assigneeId)}
-                      >{view === 'Approvals'
-                        ? name(item.creatorId).slice(0, 2)
-                        : item.assigneeId
-                          ? name(item.assigneeId).slice(0, 2)
-                          : '–'}</span
-                    ></span
-                  ><span class="row-date"
-                    >{date(view === 'Approvals' ? item.createdAt : item.updatedAt)}</span
-                  ></button
-                >
-              </div>{/each}
+              </div>
+              {#if rowReview?.identifier === item.identifier}
+                <form class="row-review" onsubmit={(event) => { event.preventDefault(); void reviewRow(item, rowReview!.decision); }}>
+                  <label for={`feedback-${item.id}`}>{rowReview.decision === 'REJECTED' ? 'Reject proposal' : 'Request changes'} · {item.identifier}</label>
+                  <input id={`feedback-${item.id}`} bind:value={rowFeedback} maxlength="10000" placeholder="Feedback for the author (optional)" disabled={busy} />
+                  <button type="button" disabled={busy} onclick={() => (rowReview = null)}>Cancel</button>
+                  <button class="primary" disabled={busy}>{rowReview.decision === 'REJECTED' ? 'Reject' : 'Request changes'}</button>
+                </form>
+              {/if}
+            {/each}
           </div>
         {/if}
         {#if !tasks.length}<div class="empty">
@@ -1728,7 +1749,7 @@
       <form onsubmit={create}>
         <label
           >Project<select bind:value={createProject} required
-            ><option value="">Select project</option>{#each projects as p}<option value={p.id}
+            ><option value="">Select project</option>{#each projects as p}<option value={String(p.id)}
                 >{p.name}</option
               >{/each}</select
           ></label
@@ -1839,7 +1860,7 @@
             bind:value={importProject}
             onchange={() => (importPreview = null)}
             required
-            ><option value="">Select project</option>{#each projects as p}<option value={p.id}
+            ><option value="">Select project</option>{#each projects as p}<option value={String(p.id)}
                 >{p.name}</option
               >{/each}</select
           ></label

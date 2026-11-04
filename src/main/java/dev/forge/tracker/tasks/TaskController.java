@@ -33,7 +33,7 @@ public class TaskController {
       @RequestParam(defaultValue = "updated") String sort,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "50") int size) {
-    return tasks.list(
+    return tasks.listForUi(
         identity.actor(auth),
         new TaskRepository.Filter(
             project,

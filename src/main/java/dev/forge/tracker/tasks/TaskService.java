@@ -44,6 +44,38 @@ public class TaskService {
     return repository.list(actor, filter);
   }
 
+  public TaskRepository.Page<Map<String, Object>> listForUi(
+      Actor actor, TaskRepository.Filter filter) {
+    var page = list(actor, filter);
+    Set<Long> following = new HashSet<>();
+    if (!page.items().isEmpty()) {
+      var args = new ArrayList<Object>();
+      args.add(actor.id());
+      page.items().forEach(task -> args.add(task.id()));
+      following.addAll(
+          db.list(
+              Long.class,
+              "SELECT task_id FROM subscriptions WHERE user_id=? AND task_id IN ("
+                  + String.join(",", Collections.nCopies(page.items().size(), "?"))
+                  + ")",
+              args.toArray()));
+    }
+    var items =
+        page.items().stream()
+            .map(
+                task -> {
+                  Map<String, Object> item =
+                      json.convertValue(
+                          task,
+                          new com.fasterxml.jackson.core.type.TypeReference<
+                              Map<String, Object>>() {});
+                  item.put("subscribed", following.contains(task.id()));
+                  return item;
+                })
+            .toList();
+    return new TaskRepository.Page<>(items, page.total(), page.page(), page.size());
+  }
+
   public Task create(Actor actor, long project, TaskInput input) {
     access.require(actor, project, WRITE);
     if (input == null) throw Problem.bad("Task fields are required.");

@@ -28,6 +28,7 @@ import org.springframework.test.context.DynamicPropertySource;
       "tracker.bootstrap-password=test-password-12345",
       "server.servlet.session.cookie.secure=false"
     })
+@org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
 class TrackerIntegrationTest {
   static final Path DATA;
 
@@ -60,6 +61,7 @@ class TrackerIntegrationTest {
   @Autowired MarkdownImport importer;
   @Autowired Attachments attachments;
   @Autowired ObjectMapper json;
+  @Autowired org.springframework.test.web.servlet.MockMvc mvc;
   @LocalServerPort int port;
   Actor owner, developer, other, agent;
   long project, isolated;
@@ -427,6 +429,37 @@ class TrackerIntegrationTest {
     assertThat(next.identifier()).isNotEqualTo(task.identifier());
     assertThat(tasks.archive(owner, task.identifier(), archived.version(), false).archived())
         .isFalse();
+  }
+
+  @Test
+  void issueListIncludesActorSpecificSubscriptionsAndBothPeople() throws Exception {
+    Task proposal = tasks.create(developer, project, input("List review proposal"));
+    tasks.create(owner, isolated, input("Private proposal"));
+    var filter = new TaskRepository.Filter(project, null, null, null, null, null, null,
+        null, null, false, false, "updated", 0, 1);
+    var authorPage = tasks.listForUi(developer, filter);
+    assertThat(authorPage.total()).isEqualTo(1);
+    assertThat(authorPage.items().getFirst()).containsEntry("subscribed", true)
+        .containsEntry("creatorId", developer.id()).containsEntry("assigneeId", null);
+    assertThat(tasks.listForUi(other, filter).items().getFirst()).containsEntry("subscribed", false);
+    tasks.subscribe(other, proposal.identifier(), true);
+    assertThat(tasks.listForUi(other, filter).items().getFirst()).containsEntry("subscribed", true);
+    tasks.subscribe(other, proposal.identifier(), false);
+    assertThat(tasks.listForUi(other, filter).items().getFirst()).containsEntry("subscribed", false);
+    assertThat(tasks.listForUi(developer, filter).items().getFirst()).containsEntry("subscribed", true);
+    assertThat(tasks.listForUi(other, new TaskRepository.Filter(null, null, null, null, null,
+        null, null, null, null, false, false, "updated", 0, 50)).items())
+        .allSatisfy(item -> assertThat(item).containsEntry("projectId", project));
+    mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/tasks")
+        .param("project", String.valueOf(project))
+        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user(developer.username())))
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.items[0].subscribed").value(true))
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.items[0].creatorId").value(developer.id()));
+    Task reviewed = tasks.approve(owner, proposal.identifier(), proposal.version(), "CHANGES_REQUESTED", "Clarify the scope");
+    assertThatThrownBy(() -> tasks.approve(owner, proposal.identifier(), proposal.version(), "APPROVED", ""))
+        .isInstanceOf(Problem.class);
+    assertThat(reviewed.approval()).isEqualTo("CHANGES_REQUESTED");
   }
 
   @Test
