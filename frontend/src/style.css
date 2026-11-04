@@ -2141,6 +2141,8 @@ time {
 .compact-issues .table-head > span { width: auto; padding: 0 6px; font-size: 10px; text-align: left; }
 .compact-issues .table-head > span::after { content: none; }
 .compact-issues .issue-row { min-height: 42px; }
+.compact-issues .issue-row.done { background: rgba(64, 150, 103, 0.16); }
+.compact-issues .issue-row.done .issue-title, .compact-issues .issue-row.done .status-cell { color: #80bca5; }
 .compact-issues .row-open { display: contents; }
 .compact-issues .row-open > span {
   width: auto;
@@ -2166,6 +2168,7 @@ time {
 }
 .row-actions button:hover { background: var(--field); border-color: var(--border); color: var(--text); }
 .row-actions .quick-approve { color: #80bca5; white-space: nowrap; }
+.row-actions .quick-done { color: #80bca5; white-space: nowrap; font-size: 10px; }
 .row-actions .quick-approve span { font-size: 10px; }
 .row-actions .danger-text:hover { color: #df8a80; }
 .row-actions .following { color: var(--accent); }

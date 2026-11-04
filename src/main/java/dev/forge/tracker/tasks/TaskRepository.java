@@ -113,7 +113,8 @@ public class TaskRepository {
             Task.class,
             "SELECT t.*"
                 + sql
-                + " ORDER BY CASE WHEN t.approval='REJECTED' THEN 1 ELSE 0 END,"
+                + " ORDER BY CASE WHEN t.status='DONE' THEN 1 ELSE 0 END,"
+                + " CASE WHEN t.approval='REJECTED' THEN 1 ELSE 0 END,"
                 + sort
                 + " LIMIT ? OFFSET ?",
             args.toArray()),
