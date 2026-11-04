@@ -1180,7 +1180,8 @@
           <span class="key-hint"><kbd>J</kbd><kbd>K</kbd> navigate <kbd>↵</kbd> open</span>
         </footer>
       {:else if view === 'Inbox'}
-        <div class="section-toolbar">
+        <div class="inbox-list">
+        <div class="section-toolbar inbox-toolbar">
           <span>{unread} unread notifications</span><button
             disabled={!unread || busy}
             onclick={() =>
@@ -1190,10 +1191,12 @@
               })}>Mark all as read</button
           >
         </div>
-        <div class="notifications">
+        <div class="notifications compact-inbox">
+          <div class="inbox-head" aria-hidden="true"><span></span><span>Issue</span><span>Title</span><span>Update</span><span>Date</span></div>
           {#each notifications as n}<button
               class="notification"
               class:unread={n.unread}
+              aria-label={`${n.message}: ${n.title}`}
               onclick={() =>
                 run(async () => {
                   await api(`/notifications/${n.id}/read`, 'POST');
@@ -1201,10 +1204,9 @@
                   await openTask(n.identifier);
                 })}
               ><span class="notification-dot"></span>
-              <div>
-                <strong>{n.message}</strong>
-                <p>{n.title}</p>
-              </div>
+              <span class="inbox-identifier">{n.identifier}</span>
+              <strong class="inbox-title">{n.title}</strong>
+              <span class="inbox-event">{n.message.replace(n.identifier + ' · ', '')}</span>
               <time>{date(n.created_at)}</time></button
             >{/each}
         </div>
@@ -1213,7 +1215,7 @@
             <h2>You're all caught up</h2>
             <p>Turn on issue notifications to receive updates here.</p>
           </div>{/if}
-        <div class="pagination">
+        <div class="pagination inbox-pagination">
           <button
             disabled={!notificationPage}
             onclick={() => {
@@ -1227,6 +1229,7 @@
               void run(loadNotifications);
             }}>Next →</button
           >
+        </div>
         </div>
       {:else if view === 'Projects'}
         <div class="section-toolbar">
