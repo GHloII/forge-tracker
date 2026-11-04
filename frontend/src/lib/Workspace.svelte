@@ -890,7 +890,9 @@
                     ><div class="card-meta">
                       <span>{item.identifier}</span><span
                         class="priority"
-                        data-priority={item.priority}>{item.priority === 'URGENT' ? '!' : '≡'}</span
+                        data-priority={item.priority}
+                        title={`Priority: ${label(item.priority)}`}
+                        aria-label={`Priority: ${label(item.priority)}`}></span
                       >
                     </div>
                     <strong>{item.title}</strong>
@@ -909,20 +911,19 @@
           <div class="issue-table compact-issues">
             <div class="table-head">
               <span></span><span>Pri</span><span>Issue</span><span>Title</span>
-              <span>Status</span><span>Author</span><span>Assignee</span>
+              <span>Approval</span><span>Status</span><span>Author</span><span>Assignee</span>
               <span>{view === 'Approvals' ? 'Submitted' : 'Updated'}</span><span>Actions</span>
             </div>
             {#each tasks as item, i (item.identifier)}
               <div class="issue-row" class:done={item.status === 'DONE'} class:focused={focusIndex === i} class:selected={selected.has(item.identifier)} id={`row-${i}`}>
                 <div class="select-cell"><input type="checkbox" aria-label={`Select ${item.identifier}`} checked={selected.has(item.identifier)} onchange={() => toggleSelect(item.identifier)} /></div>
-                <button class="row-open" onclick={() => { focusIndex = i; void openTask(item.identifier); }} aria-label={`Open ${item.identifier}: ${item.title}`}>
-                  <span class="priority" data-priority={item.priority} title={label(item.priority)}>{item.priority === 'URGENT' ? '!' : item.priority === 'NONE' ? '–' : '≡'}</span>
+                <button class="row-open" onclick={() => { focusIndex = i; void openTask(item.identifier); }} aria-label={`Open ${item.identifier}: ${item.title}, priority ${label(item.priority)}`}>
+                  <span class="priority" data-priority={item.priority} title={`Priority: ${label(item.priority)}`}></span>
                   <span class="issue-id">{item.identifier}</span>
                   <span class="issue-title" title={item.title}><strong>{item.title}</strong>
                     {#each labels(item.labels).slice(0, 1) as tag}<span class="tag">{tag}</span>{/each}
-                    {#if item.approval === 'REJECTED'}<span class="rejected-tag">● Rejected</span>{/if}
-                    {#if item.approval === 'PENDING' && view !== 'Approvals'}<span class="approval-tag">◇ Pending</span>{/if}
                   </span>
+                  <span class="approval-cell"><span class="approval-tag" data-approval={item.approval}>{#if item.approval === 'PENDING'}<span aria-hidden="true">◇</span>{' '}{:else if item.approval === 'REJECTED'}<span aria-hidden="true">●</span>{' '}{/if}{label(item.approval)}</span></span>
                   <span class="status-cell"><span class="status-dot" style:background={colors[item.status]}></span><span>{label(item.status)}</span></span>
                   <span class="person-cell creator-cell" title={`Author: ${name(item.creatorId)}`}><span class="avatar tiny">{name(item.creatorId).slice(0, 2)}</span><span>{name(item.creatorId)}</span></span>
                   <span class="row-date">{date(view === 'Approvals' ? item.createdAt : item.updatedAt)}</span>
@@ -1835,19 +1836,17 @@
                 >{p.name}</option
               >{/each}</select
           ></label
-        ><input
-          class="title-input"
-          bind:value={newTask.title}
-          placeholder="Issue title"
-          required
-          maxlength="240"
-          aria-label="Issue title"
-        /><textarea
-          class="description-input"
-          bind:value={newTask.description}
-          placeholder="Describe the problem, requirements and expected outcome…"
-          maxlength="100000"
-          aria-label="Description"></textarea>
+        ><label>Issue title<input
+            class="title-input"
+            bind:value={newTask.title}
+            required
+            maxlength="240"
+          /></label
+        ><label>Description<textarea
+            class="description-input"
+            bind:value={newTask.description}
+            placeholder="Describe the problem, requirements and expected outcome…"
+            maxlength="100000"></textarea></label>
         <div class="form-grid">
           <label
             >Type<select bind:value={newTask.type}
@@ -1861,11 +1860,11 @@
             >Labels<input bind:value={newTask.labels} placeholder="Comma separated" /></label
           >
         </div>
-        <p class="fine">Every proposal starts in Backlog and requires human approval.</p>
+        <p class="fine">New issues start in Backlog and require human approval before work can begin.</p>
         <footer>
           <button type="button" onclick={() => (createOpen = false)}>Cancel</button><button
             class="primary"
-            disabled={busy || !createProject}>Create proposal</button
+            disabled={busy || !createProject}>Create issue</button
           >
         </footer>
       </form>

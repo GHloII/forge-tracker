@@ -37,6 +37,58 @@ test.beforeEach(async ({ context }) => {
   });
 });
 
+test('issue columns fit their contents and priority indicators match their values', async ({ page }) => {
+  const priorities = ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+  const approvals = ['PENDING', 'APPROVED', 'CHANGES_REQUESTED', 'REJECTED', 'PENDING'];
+  await page.route('**/api/tasks?**', async (route) => {
+    const items = priorities.map((priority, index) => ({
+      id: index + 1, projectId: 42, identifier: `TEST-${index + 1}`,
+      title: index === 1 ? 'A longer issue title to size the column' : 'Issue',
+      description: '', type: 'FEATURE', priority, status: 'BACKLOG', approval: approvals[index],
+      creatorId: 7, assigneeId: null, category: '', labels: '[]', subscribed: false,
+      archived: false, version: 1, revision: 1,
+      createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+    }));
+    await route.fulfill({ json: { items, total: items.length, page: 0, size: 50 } });
+  });
+  await page.goto('/issues');
+  const rows = page.locator('.compact-issues .issue-row');
+  await expect(rows).toHaveCount(5);
+  for (const [index, priority] of priorities.entries()) {
+    const marker = rows.nth(index).locator('.priority');
+    await expect(marker).toHaveAttribute('title', `Priority: ${priority[0] + priority.slice(1).toLowerCase()}`);
+    const style = await marker.evaluate((element) => {
+      const pseudo = getComputedStyle(element, '::before');
+      return { content: pseudo.content, background: pseudo.backgroundColor, opacity: pseudo.opacity, color: pseudo.color };
+    });
+    expect(style.content).toBe(priority === 'HIGH' || priority === 'URGENT' ? '"!"' : '""');
+    if (priority === 'LOW') expect(style.opacity).toBe('0.5');
+    if (priority === 'MEDIUM') expect(style.background).toBe('rgb(88, 155, 255)');
+    if (priority === 'HIGH') expect(style.color).toBe('rgb(242, 201, 76)');
+    if (priority === 'URGENT') expect(style.color).toBe('rgb(240, 91, 100)');
+  }
+  const authors = rows.locator('.creator-cell > span:last-child');
+  for (const author of await authors.all()) {
+    expect(await author.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  }
+  const titleLefts = await rows.locator('.issue-title').evaluateAll((elements) =>
+    elements.map((element) => element.getBoundingClientRect().left),
+  );
+  expect(new Set(titleLefts).size).toBe(1);
+  await expect(page.locator('.compact-issues .table-head')).toContainText('Approval');
+  await expect(rows.locator('.approval-cell')).toHaveText([
+    '◇ Pending', 'Approved', 'Changes requested', '● Rejected', '◇ Pending',
+  ]);
+  await expect(rows.first().locator('.approval-tag')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(rows.first().locator('.approval-tag')).toHaveCSS('border-top-width', '0px');
+  const approvalLefts = await rows.locator('.approval-cell').evaluateAll((elements) =>
+    elements.map((element) => element.getBoundingClientRect().left),
+  );
+  expect(new Set(approvalLefts).size).toBe(1);
+  const rowHeight = await rows.first().evaluate((element) => element.getBoundingClientRect().height);
+  expect(rowHeight).toBeLessThan(42);
+});
+
 test('page shells contain rendered content before JavaScript starts', async ({ request }) => {
   for (const [path, title] of [['/inbox', 'Inbox'], ['/settings/people/', 'People · Settings']]) {
     const response = await request.get(path);
