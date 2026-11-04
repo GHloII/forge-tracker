@@ -88,21 +88,7 @@ longer than Vite. Use localhost port 5173 so the browser origin matches configur
 Run checks inside the container with `bash gradlew test bootJar` and
 `cd frontend && npm run check && npm run build`.
 
-### Other development options
-
-For frontend hot reload with only Docker Desktop installed, run from the project root:
-
-```powershell
-docker compose -f compose.dev.yml up --build
-```
-
-Open http://localhost:5173 and edit files in `frontend/src`. Saved changes appear
-automatically through Vite hot reload. File polling supports Windows bind mounts.
-On a fresh development database, sign in as `owner` with
-`local-development-password` (or your `BOOTSTRAP_PASSWORD` from `.env`).
-Development uses its own database volume, separate from production.
-Stop with Ctrl+C; remove the containers with `docker compose -f compose.dev.yml down`.
-Rebuild after backend changes; frontend edits need no rebuild.
+### Local development
 
 Java 21 and Node 22.12+ are required. The Gradle wrapper is included and its distribution checksum is pinned.
 
