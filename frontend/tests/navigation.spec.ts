@@ -27,12 +27,25 @@ test.beforeEach(async ({ context }) => {
       case '/api/csrf': body = { token: 'test-csrf', header: 'X-CSRF-TOKEN' }; break;
       case '/api/invitations/accept': body = { project_id: 42 }; break;
       case '/api/users':
+      case '/api/projects/42/roles':
+      case '/api/projects/42/invitations':
       case '/api/tokens':
       case '/api/audit': body = []; break;
       default: throw new Error(`Unexpected API request: ${url.pathname}`);
     }
     await route.fulfill({ json: body });
   });
+});
+
+test('page shells contain rendered content before JavaScript starts', async ({ request }) => {
+  for (const [path, title] of [['/inbox', 'Inbox'], ['/settings/people/', 'People · Settings']]) {
+    const response = await request.get(path);
+    expect(response.ok()).toBeTruthy();
+    const html = await response.text();
+    expect(html).toContain(`<title>${title} · Forge</title>`);
+    expect(html).toContain('Opening your workspace…');
+    expect(html).toContain('href="/_app/');
+  }
 });
 
 test('native links navigate with history and keep the workspace mounted', async ({ page }) => {
@@ -90,6 +103,14 @@ test('settings use distinct file routes and survive refresh', async ({ page }) =
   await page.getByRole('link', { name: 'MCP connections', exact: true }).click();
   await expect(page).toHaveURL('/settings/mcp-connections?project=42');
   await expect(page.getByRole('heading', { name: 'MCP connections', exact: true })).toBeVisible();
+});
+
+test('project settings with runtime IDs load and survive refresh', async ({ page }) => {
+  await page.goto('/projects/42/settings');
+  await expect(page.getByRole('heading', { name: 'Project details', exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Sample project');
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Sample project');
 });
 
 test('invitation fragments lead to the accepted project through native navigation', async ({ page }) => {

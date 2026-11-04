@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick, type Snippet } from 'svelte';
+  import { onMount, tick, untrack, type Snippet } from 'svelte';
   import { setWorkspaceViews } from './workspace-views';
   import { afterNavigate, goto, replaceState } from '$app/navigation';
   import { page as currentPage } from '$app/state';
@@ -34,7 +34,7 @@
     loading = $state(true),
     error = $state(''),
     busy = $state(false);
-  let invitationToken = $state(new URLSearchParams(location.hash.slice(1)).get('invite') ?? '');
+  let invitationToken = $state('');
   let inviteSignIn = $state(false);
   let registrationName = $state(''),
     confirmation = $state('');
@@ -96,7 +96,7 @@
     notificationPage = $state(0),
     notificationTotal = $state(0),
     unread = $state(0);
-  let settingsTab = $state('Account'),
+  let settingsTab = $state(untrack(() => section)),
     allUsers = $state<Person[]>([]),
     tokens = $state<Entry[]>([]),
     audit = $state<Entry[]>([]),
@@ -113,7 +113,7 @@
     importPreview = $state<Entry[] | null>(null);
   let passwordForm = $state({ current: '', replacement: '' }),
     shortcuts = $state(false),
-    theme = $state(localStorage.getItem('forge-theme') ?? 'dark'),
+    theme = $state('dark'),
     toast = $state('');
   const navigation = [
     { name: 'Inbox', icon: '◫' },
@@ -211,8 +211,10 @@
   async function initialize() {
     me = await api<Actor>('/me');
     projects = await api<Project[]>('/projects');
-    await loadPageData();
-    if (view !== 'Inbox') await loadNotifications();
+    await Promise.all([
+      loadPageData(),
+      ...(view !== 'Inbox' ? [loadNotifications()] : []),
+    ]);
   }
   async function login(event: SubmitEvent) {
     event.preventDefault();
@@ -771,7 +773,8 @@
       void openTask(tasks[focusIndex].identifier);
   }
   onMount(() => {
-    setTheme(theme);
+    invitationToken = new URLSearchParams(location.hash.slice(1)).get('invite') ?? '';
+    setTheme(localStorage.getItem('forge-theme') ?? 'dark');
     let alive = true;
     initialize()
       .catch(() => {

@@ -1,2 +1,2 @@
-// Spring Boot serves the static shell; authenticated data comes from its REST API.
-export const ssr = false;
+// Build public page shells; authenticated data still comes from the REST API in the browser.
+export const prerender = true;

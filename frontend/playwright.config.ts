@@ -6,7 +6,9 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: { baseURL: 'http://127.0.0.1:5174', navigationTimeout: 60_000 },
   webServer: {
-    command: 'npm run dev -- --port 5174 --strictPort',
+    command: process.env.PLAYWRIGHT_PREVIEW
+      ? 'npx vite preview --host 127.0.0.1 --port 5174 --strictPort'
+      : 'npm run dev -- --port 5174 --strictPort',
     url: 'http://127.0.0.1:5174',
     timeout: 120_000,
   },

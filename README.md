@@ -115,9 +115,10 @@ $env:PUBLIC_ORIGIN = 'http://localhost:8080'
 
 Open `http://localhost:8080`. Gradle builds the frontend and serves it from the application. For frontend hot reload, run `npm ci` and `npm run dev` in `frontend` alongside the backend. Vite proxies `/api` to port 8080. Production cookies are secure by default; disable this only for local HTTP.
 
-SvelteKit uses file-based routes in `frontend/src/routes`, native links and `goto` for navigation. The shared layout preserves workspace state between pages. The static adapter produces `frontend/dist`; Spring Boot serves that build and returns the SvelteKit shell for direct page visits. No Node server runs in production.
+SvelteKit uses file-based routes in `frontend/src/routes`, native links and `goto` for navigation. The shared layout preserves workspace state between pages. The static adapter prerenders public page shells into `frontend/dist`; Spring Boot serves each route's generated HTML for direct visits. Authenticated data loads in the browser. Project settings URLs contain runtime project IDs and use the generated `200.html` client fallback, as do unknown page URLs. No Node server runs in production.
 
 Run navigation browser tests with `cd frontend && npx playwright install --with-deps chromium --only-shell && npm run test:e2e`.
+To test the generated pages, build the frontend first, then run `PLAYWRIGHT_PREVIEW=1 npm run test:e2e` from `frontend`.
 
 ```sh
 ./gradlew test bootJar

@@ -8,12 +8,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Base64;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
 import org.springframework.core.annotation.Order;
-import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -157,20 +158,21 @@ public class SecurityConfiguration {
   }
 
   private static String browserContentSecurityPolicy() throws Exception {
-    // SvelteKit's static shell contains a generated inline bootstrap. Allow only its exact bytes.
-    var shell = new ClassPathResource("static/index.html");
+    // Each prerendered page and the client fallback have their own generated bootstrap.
     // API-only development can run beside Vite without a packaged frontend.
-    String html = shell.exists() ? shell.getContentAsString(StandardCharsets.UTF_8) : "";
-    var scripts = Pattern.compile("<script\\b[^>]*>(.*?)</script>", Pattern.DOTALL).matcher(html);
-    var hashes = new StringBuilder();
-    while (scripts.find()) {
-      String script = scripts.group(1);
-      if (!script.isBlank()) {
-        byte[] digest = MessageDigest.getInstance("SHA-256").digest(script.getBytes(StandardCharsets.UTF_8));
-        hashes.append(" 'sha256-").append(Base64.getEncoder().encodeToString(digest)).append("'");
+    var hashes = new LinkedHashSet<String>();
+    var scriptPattern = Pattern.compile("<script\\b[^>]*>(.*?)</script>", Pattern.DOTALL);
+    for (var page : new PathMatchingResourcePatternResolver().getResources("classpath*:static/**/*.html")) {
+      var scripts = scriptPattern.matcher(page.getContentAsString(StandardCharsets.UTF_8));
+      while (scripts.find()) {
+        String script = scripts.group(1);
+        if (!script.isBlank()) {
+          byte[] digest = MessageDigest.getInstance("SHA-256").digest(script.getBytes(StandardCharsets.UTF_8));
+          hashes.add(" 'sha256-" + Base64.getEncoder().encodeToString(digest) + "'");
+        }
       }
     }
-    return "default-src 'self'; script-src 'self'" + hashes
+    return "default-src 'self'; script-src 'self'" + String.join("", hashes)
         + "; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; connect-src 'self';"
         + " frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
   }

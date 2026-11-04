@@ -938,13 +938,25 @@ class TrackerIntegrationTest {
         "/", "/inbox", "/my-issues", "/approvals", "/issues?project=123",
         "/board", "/projects", "/settings", "/settings/account", "/settings/people",
         "/settings/mcp-connections", "/settings/audit-log", "/projects/123/settings",
-        "/inbox/", "/future-page")) {
+        "/inbox/", "/settings/people/", "/future-page")) {
       var response = client.send(
           HttpRequest.newBuilder(URI.create(base + path)).GET().build(),
           HttpResponse.BodyHandlers.ofString());
       assertThat(response.statusCode()).as(path).isEqualTo(200);
       assertThat(response.headers().firstValue("Content-Type").orElse("")).contains("text/html");
       assertThat(response.body()).as(path).contains("<div id=\"app\">");
+      String pagePath = path.split("\\?", 2)[0].replaceAll("/+$", "");
+      String resourcePath = pagePath.isEmpty() ? "index" : pagePath.substring(1);
+      var html = new org.springframework.core.io.ClassPathResource("static/" + resourcePath + ".html");
+      boolean prerendered = !List.of("/projects/123/settings", "/future-page").contains(pagePath);
+      if (prerendered) {
+        assertThat(html.exists()).as("prerendered HTML for %s", path).isTrue();
+        assertThat(response.body()).contains("Opening your workspace…", "<title>");
+      } else {
+        html = new org.springframework.core.io.ClassPathResource("static/200.html");
+      }
+      assertThat(response.body()).as("served HTML for %s", path)
+          .isEqualTo(html.getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
     }
     for (String path : List.of("/api/tasks", "/api/projects", "/api/not-a-page", "/actuator/env", "/mcp")) {
       var response = client.send(
@@ -966,17 +978,25 @@ class TrackerIntegrationTest {
     assertThat(policy).contains("script-src 'self' 'sha256-");
     assertThat(policy.substring(policy.indexOf("script-src"), policy.indexOf(";", policy.indexOf("script-src"))))
         .doesNotContain("unsafe-inline");
-    var scripts = java.util.regex.Pattern.compile("<script\\b[^>]*>(.*?)</script>", java.util.regex.Pattern.DOTALL)
-        .matcher(response.body());
-    int count = 0;
-    while (scripts.find()) {
-      if (scripts.group(1).isBlank()) continue;
-      byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
-          .digest(scripts.group(1).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-      assertThat(policy).contains("'sha256-" + Base64.getEncoder().encodeToString(digest) + "'");
-      count++;
+    for (String path : List.of("/", "/inbox", "/my-issues", "/approvals", "/issues", "/board",
+        "/projects", "/settings", "/settings/account", "/settings/people",
+        "/settings/mcp-connections", "/settings/audit-log", "/projects/123/settings")) {
+      var page = client.send(
+          HttpRequest.newBuilder(URI.create(base + path)).GET().build(),
+          HttpResponse.BodyHandlers.ofString());
+      var scripts = java.util.regex.Pattern.compile("<script\\b[^>]*>(.*?)</script>", java.util.regex.Pattern.DOTALL)
+          .matcher(page.body());
+      int count = 0;
+      while (scripts.find()) {
+        if (scripts.group(1).isBlank()) continue;
+        byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(scripts.group(1).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertThat(policy).as("bootstrap policy for %s", path)
+            .contains("'sha256-" + Base64.getEncoder().encodeToString(digest) + "'");
+        count++;
+      }
+      assertThat(count).as("bootstrap for %s", path).isPositive();
     }
-    assertThat(count).isPositive();
     var assets = java.util.regex.Pattern.compile("[\"'](/_app/[^\"']+)[\"']").matcher(response.body());
     int assetCount = 0;
     while (assets.find()) {
