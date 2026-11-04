@@ -67,6 +67,43 @@ Repeat imports with the same source name, normalized category/title and occurren
 
 ## Development
 
+### Devcontainer (recommended for frontend work)
+
+Install Docker Desktop and the VS Code Dev Containers extension. Open this repository
+in VS Code and run **Dev Containers: Reopen in Container** from the command palette.
+The container includes Java 21 and Node 22, and installs Codex CLI and frontend dependencies.
+To use Codex, run `codex login --device-auth`, follow the sign-in instructions,
+then run `codex` from the project root in a container terminal.
+In its terminal, run:
+
+```bash
+bash .devcontainer/start.sh
+```
+
+Open http://localhost:5173. Edit `frontend/src` and save to see changes immediately.
+Sign in as `owner` / `local-development-password` on a fresh database.
+Local data persists in the workspace's ignored `data/` directory. Ctrl+C stops both
+servers. The initial Gradle run downloads dependencies; backend startup may take
+longer than Vite. Use localhost port 5173 so the browser origin matches configuration.
+Run checks inside the container with `bash gradlew test bootJar` and
+`cd frontend && npm run check && npm run build`.
+
+### Other development options
+
+For frontend hot reload with only Docker Desktop installed, run from the project root:
+
+```powershell
+docker compose -f compose.dev.yml up --build
+```
+
+Open http://localhost:5173 and edit files in `frontend/src`. Saved changes appear
+automatically through Vite hot reload. File polling supports Windows bind mounts.
+On a fresh development database, sign in as `owner` with
+`local-development-password` (or your `BOOTSTRAP_PASSWORD` from `.env`).
+Development uses its own database volume, separate from production.
+Stop with Ctrl+C; remove the containers with `docker compose -f compose.dev.yml down`.
+Rebuild after backend changes; frontend edits need no rebuild.
+
 Java 21 and Node 22.12+ are required. The Gradle wrapper is included and its distribution checksum is pinned.
 
 ```powershell

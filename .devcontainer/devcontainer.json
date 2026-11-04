@@ -1,0 +1,21 @@
+{
+  "name": "Forge development",
+  "image": "mcr.microsoft.com/devcontainers/java:1-21-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" }
+  },
+  "forwardPorts": [5173, 8080],
+  "portsAttributes": {
+    "5173": { "label": "Frontend (hot reload)", "onAutoForward": "openBrowser" },
+    "8080": { "label": "Backend", "onAutoForward": "silent" }
+  },
+  "containerEnv": {
+    "BOOTSTRAP_USER": "owner",
+    "BOOTSTRAP_PASSWORD": "local-development-password",
+    "COOKIE_SECURE": "false",
+    "PUBLIC_ORIGIN": "http://localhost:5173",
+    "DEV_POLLING": "true"
+  },
+  "postCreateCommand": "npm install -g @openai/codex && cd frontend && npm ci",
+  "remoteUser": "vscode"
+}
