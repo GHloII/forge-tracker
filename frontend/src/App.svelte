@@ -572,6 +572,16 @@
     else next.add(id);
     selected = next;
   }
+  async function archiveRow(item: Task) {
+    await run(async () => {
+      await api(`/tasks/${item.identifier}/archive`, 'POST', {
+        version: item.version, archived: !item.archived,
+      });
+      selected = new Set([...selected].filter((id) => id !== item.identifier));
+      await loadTasks();
+      notify(item.archived ? 'Issue restored' : 'Issue archived');
+    });
+  }
   async function bulkArchive() {
     await run(async () => {
       for (const item of tasks.filter((t) => selected.has(t.identifier)))
@@ -1104,6 +1114,12 @@
                   </select>
                 </div>
                 <div class="row-actions">
+                  {#if managesProject(item.projectId)}
+                    <button disabled={busy} title={item.archived ? 'Restore issue' : 'Archive issue'} aria-label={`${item.archived ? 'Restore' : 'Archive'} ${item.identifier}`} onclick={() => archiveRow(item)}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 9v11h16V9M3 4h18v5H3z"/>{#if item.archived}<path d="m9 14 3-3 3 3m-3-3v6"/>{:else}<path d="M9 13h6"/>{/if}</svg>
+                    </button>
+                  {/if}
+
                   {#if item.approval === 'PENDING' && owner && !item.archived}
                     <button class="quick-approve" disabled={busy} title={`Approve ${item.identifier}`} aria-label={`Approve ${item.identifier}`} onclick={() => { rowFeedback = ''; void reviewRow(item, 'APPROVED'); }}>✓ <span>Approve</span></button>
                     <button disabled={busy} title={`Request changes to ${item.identifier}`} aria-label={`Request changes to ${item.identifier}`} onclick={() => startRowReview(item, 'CHANGES_REQUESTED')}>↺</button>

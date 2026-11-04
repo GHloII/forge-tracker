@@ -2131,7 +2131,7 @@ time {
 .compact-issues {
   max-width: 1280px;
   overflow-x: auto;
-  --issue-columns: 28px 32px 78px minmax(210px, 1fr) 100px 112px 112px 68px 154px;
+  --issue-columns: 28px 32px 78px minmax(210px, 1fr) 100px 112px 112px 68px 182px;
 }
 .compact-issues .table-head, .compact-issues .issue-row {
   display: grid;
