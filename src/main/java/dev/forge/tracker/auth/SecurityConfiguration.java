@@ -105,6 +105,7 @@ public class SecurityConfiguration {
                 a.requestMatchers(
                         "/api/csrf",
                         "/api/login",
+                        "/api/register",
                         "/actuator/health",
                         "/",
                         "/index.html",

@@ -20,6 +20,9 @@
     loading = $state(true),
     error = $state(''),
     busy = $state(false);
+  let invitationToken = $state(new URLSearchParams(location.hash.slice(1)).get('invite') ?? '');
+  let registrationName = $state(''), confirmation = $state('');
+  let invitations = $state<Entry[]>([]), freshInvitation = $state('');
   let username = $state(''),
     password = $state('');
   let view = $state('All Issues'),
@@ -186,6 +189,14 @@
   async function login(event: SubmitEvent) {
     event.preventDefault();
     await run(async () => {
+      if (invitationToken) {
+        if (password !== confirmation) throw new Error('Passwords do not match.');
+        await api('/register', 'POST', { token: invitationToken, username, displayName: registrationName, password });
+        invitationToken = '';
+        confirmation = '';
+        history.replaceState(null, '', location.pathname);
+        notify('Account created');
+      }
       await api('/login', 'POST', new URLSearchParams({ username, password }));
       password = '';
       await refreshCsrf();
@@ -199,6 +210,8 @@
       detail = null;
       password = '';
       freshToken = '';
+      freshInvitation = '';
+      invitations = [];
       tokens = [];
       allUsers = [];
       audit = [];
@@ -473,10 +486,11 @@
   }
   async function loadSettings() {
     if (!owner) return;
-    [allUsers, tokens, audit] = await Promise.all([
+    [allUsers, tokens, audit, invitations] = await Promise.all([
       api<Person[]>('/users'),
       api<Entry[]>('/tokens'),
       api<Entry[]>(`/audit?page=${auditPage}`),
+      api<Entry[]>('/invitations'),
     ]);
   }
   async function createUser(event: SubmitEvent) {
@@ -656,20 +670,24 @@
   <main class="login">
     <form onsubmit={login}>
       <div class="brand-mark">f</div>
-      <h1>Welcome to Forge</h1>
+      <h1>{invitationToken ? 'Join Forge' : 'Welcome to Forge'}</h1>
       <p class="muted">A clear path from proposal to shipped.</p>
-      <label>Username<input bind:value={username} autocomplete="username" required /></label><label
+      {#if invitationToken}<label>Display name<input bind:value={registrationName} maxlength="100" required /></label>{/if}
+      <label>Username<input bind:value={username} autocomplete="username" pattern={'[A-Za-z0-9_.-]{1,40}'} required /></label><label
         >Password<input
           bind:value={password}
           type="password"
-          autocomplete="current-password"
+          autocomplete={invitationToken ? 'new-password' : 'current-password'}
+          minlength={invitationToken ? 12 : undefined}
           required
         /></label
       >
+      {#if invitationToken}<label>Confirm password<input type="password" bind:value={confirmation} autocomplete="new-password" required /></label>{/if}
       {#if error}<div class="error">{error}</div>{/if}<button class="primary" disabled={busy}
-        >Sign in <span>→</span></button
+        >{invitationToken ? 'Create account' : 'Sign in'} <span>→</span></button
       >
-      <p class="fine">Accounts are managed by your workspace owner.</p>
+      <p class="fine">{invitationToken ? 'Single-use invitation. Your owner will grant project access.' : 'Ask your workspace owner for an invitation to create an account.'}</p>
+      {#if invitationToken}<button type="button" onclick={() => { invitationToken = ''; history.replaceState(null, '', location.pathname); error = ''; }}>Back to sign in</button>{/if}
     </form>
   </main>
 {:else}
@@ -1125,6 +1143,25 @@
               </form>
             </section>
           {:else if settingsTab === 'People'}<section>
+              <h2>Invite a developer</h2>
+              <p class="muted">Single-use link, valid for 7 days. Grant project access after registration.</p>
+              <button disabled={busy} onclick={() => run(async () => {
+                const result = await api<Entry>('/invitations', 'POST');
+                freshInvitation = `${location.origin}/#invite=${result.token}`;
+                await loadSettings();
+              })}>Create invitation link</button>
+              {#if freshInvitation}<label>Copy this link now<input readonly value={freshInvitation} onclick={(event) => event.currentTarget.select()} /></label>
+                <button onclick={() => run(async () => { await navigator.clipboard.writeText(freshInvitation); notify('Invitation copied'); })}>Copy link</button>{/if}
+              <div class="member-list">{#each invitations as invite}<div>
+                <strong>Invitation #{invite.id}</strong>
+                <span class="muted">Expires {new Date(invite.expires_at).toLocaleString()}</span>
+                <span>{invite.used_by ? 'Accepted' : invite.revoked ? 'Revoked' : Date.parse(invite.expires_at) <= Date.now() ? 'Expired' : 'Pending'}</span>
+                {#if !invite.used_by && !invite.revoked && Date.parse(invite.expires_at) > Date.now()}<button disabled={busy} onclick={() => run(async () => {
+                  await api(`/invitations/${invite.id}`, 'DELETE');
+                  await loadSettings();
+                })}>Revoke</button>{/if}
+              </div>{/each}</div>
+            </section><section>
               <h2>People & agents</h2>
               <div class="member-list">
                 {#each allUsers as user}<div>

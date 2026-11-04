@@ -53,6 +53,7 @@ class TrackerIntegrationTest {
   @Autowired TaskService tasks;
   @Autowired ProjectService projects;
   @Autowired AgentTokens tokens;
+  @Autowired Invitations invitations;
   @Autowired Access access;
   @Autowired Database db;
   @Autowired MarkdownImport importer;
@@ -96,6 +97,51 @@ class TrackerIntegrationTest {
   TaskInput input(String title) {
     return new TaskInput(
         title, "## Scope\nBuild the feature", "FEATURE", "HIGH", "Gameplay", List.of("core"));
+  }
+
+  @Test
+  void invitationsAreRestrictedSingleUseAndTransactional() {
+    assertThatThrownBy(() -> invitations.create(agent)).isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> invitations.create(developer)).isInstanceOf(Problem.class);
+    @SuppressWarnings("unchecked")
+    var invite = (Map<String, Object>) invitations.create(owner);
+    String raw = (String) invite.get("token");
+    long id = ((Number) invite.get("id")).longValue();
+    assertThat(db.one(String.class, "SELECT hash FROM invitations WHERE id=?", id)).isNotEqualTo(raw);
+    String name = "invited" + sequence;
+    assertThatThrownBy(() -> invitations.register(raw, name, "New developer", "short"))
+        .isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> invitations.register(raw, developer.username(), "Duplicate", "password-123456"))
+        .isInstanceOf(Problem.class);
+    invitations.register(raw, name, "New developer", "password-123456");
+    long user = db.one(Long.class, "SELECT id FROM users WHERE username=?", name);
+    assertThat(db.one(String.class, "SELECT kind FROM users WHERE id=?", user)).isEqualTo("DEVELOPER");
+    assertThat(db.one(Long.class, "SELECT count(*) FROM members WHERE user_id=?", user)).isZero();
+    assertThat(db.one(Long.class, "SELECT used_by FROM invitations WHERE id=?", id)).isEqualTo(user);
+    assertThatThrownBy(() -> invitations.register(raw, name + "again", "Replay", "password-123456"))
+        .isInstanceOf(Problem.class);
+    assertThat(db.one(Long.class, "SELECT count(*) FROM users WHERE username=?", name + "again")).isZero();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void revokedExpiredAndDisabledIssuerInvitationsCannotRegister() {
+    var revoked = (Map<String, Object>) invitations.create(owner);
+    invitations.revoke(owner, ((Number) revoked.get("id")).longValue());
+    assertThatThrownBy(() -> invitations.register((String) revoked.get("token"), "revoked", "Revoked", "password-123456"))
+        .isInstanceOf(Problem.class);
+    var expired = (Map<String, Object>) invitations.create(owner);
+    db.execute("UPDATE invitations SET expires_at='2000-01-01T00:00:00Z' WHERE id=?", expired.get("id"));
+    assertThatThrownBy(() -> invitations.register((String) expired.get("token"), "expired", "Expired", "password-123456"))
+        .isInstanceOf(Problem.class);
+    var disabled = (Map<String, Object>) invitations.create(owner);
+    try {
+      db.execute("UPDATE users SET enabled=0 WHERE id=?", owner.id());
+      assertThatThrownBy(() -> invitations.register((String) disabled.get("token"), "disabled", "Disabled", "password-123456"))
+          .isInstanceOf(Problem.class);
+    } finally {
+      db.execute("UPDATE users SET enabled=1 WHERE id=?", owner.id());
+    }
   }
 
   Task approvedAssigned(Actor assignee) {

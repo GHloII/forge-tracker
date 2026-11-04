@@ -101,3 +101,12 @@ The integration suite exercises real SQLite migrations, competing writes, permis
 Measured locally on Windows with Java 21 and `-Xms64m -Xmx320m`: initial startup 5.06 seconds, approximately 213 MiB working set and 254 MiB private memory after several interactive operations. The application JAR was approximately 44.2 MiB; the frontend JavaScript approximately 59 KB gzip. These observations describe a small local workload; measure your own container under its expected load.
 
 Docker verification with one CPU and a 512 MiB limit measured a 12.1-second first startup and approximately 181 MiB after the HTTP smoke test. Caddy configuration validation, a smoke test through a local Caddy reverse proxy and data verification after container restart passed. Public-domain certificate issuance requires deployment with working DNS and reachable ACME ports.
+# Invitation registration
+
+Owners can create invitation links in **Settings → People → Create invitation link**.
+Copy the link when it appears and send it to the intended participant. Each link
+expires after seven days, works once, and can be revoked from the same screen.
+The participant chooses a username, display name and password, then signs in
+automatically. New accounts are developers; owners grant their project permissions
+separately in **Settings → Project access**. Invitation secrets are stored only as
+SHA-256 hashes and are never returned by the invitation list.
