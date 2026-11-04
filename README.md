@@ -1,6 +1,6 @@
 # Forge
 
-A self-hosted issue tracker for small teams and coding agents. Java 21, Spring Boot, SQLite, Svelte and MCP Streamable HTTP run in one application process. Caddy provides the HTTPS entry point.
+A self-hosted issue tracker for small teams and coding agents. Java 21, Spring Boot, SQLite, SvelteKit and MCP Streamable HTTP run in one application process. Caddy provides the HTTPS entry point.
 
 Production: https://forge.144-31-86-112.sslip.io
 
@@ -114,6 +114,10 @@ $env:PUBLIC_ORIGIN = 'http://localhost:8080'
 ```
 
 Open `http://localhost:8080`. Gradle builds the frontend and serves it from the application. For frontend hot reload, run `npm ci` and `npm run dev` in `frontend` alongside the backend. Vite proxies `/api` to port 8080. Production cookies are secure by default; disable this only for local HTTP.
+
+SvelteKit uses file-based routes in `frontend/src/routes`, native links and `goto` for navigation. The shared layout preserves workspace state between pages. The static adapter produces `frontend/dist`; Spring Boot serves that build and returns the SvelteKit shell for direct page visits. No Node server runs in production.
+
+Run navigation browser tests with `cd frontend && npx playwright install --with-deps chromium --only-shell && npm run test:e2e`.
 
 ```sh
 ./gradlew test bootJar

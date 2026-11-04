@@ -1,5 +1,18 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, type Snippet } from 'svelte';
+  import { setWorkspaceViews } from './workspace-views';
+  import { afterNavigate, goto, replaceState } from '$app/navigation';
+  import { page as currentPage } from '$app/state';
+  import { pageUrl } from './navigation';
+
+  let { view, section = 'Account', children }: { view: string; section?: string; children: Snippet } = $props();
+  setWorkspaceViews({
+    get issues() { return issues; },
+    get inbox() { return inbox; },
+    get projectsPage() { return projectsPage; },
+    get projectSettings() { return projectSettings; },
+    get settings() { return settings; },
+  });
   import Markdown from './Markdown.svelte';
   import ProjectSettings from './ProjectSettings.svelte';
   import {
@@ -27,8 +40,7 @@
     confirmation = $state('');
   let username = $state(''),
     password = $state('');
-  let view = $state('All Issues'),
-    project = $state(''),
+  let project = $state(''),
     projects = $state<Project[]>([]),
     people = $state<Person[]>([]);
   let projectPeople = $state<Record<number, Person[]>>({});
@@ -199,10 +211,8 @@
   async function initialize() {
     me = await api<Actor>('/me');
     projects = await api<Project[]>('/projects');
-    await loadPeople();
-    await Promise.all([loadTasks(), loadNotifications()]);
-    const id = new URLSearchParams(location.hash.slice(1)).get('task');
-    if (id) await openTask(id);
+    await loadPageData();
+    if (view !== 'Inbox') await loadNotifications();
   }
   async function login(event: SubmitEvent) {
     event.preventDefault();
@@ -219,7 +229,7 @@
         invitedProject = result.project_id;
         invitationToken = '';
         confirmation = '';
-        history.replaceState(null, '', location.pathname);
+        replaceState(currentPage.url.pathname + currentPage.url.search, currentPage.state);
         notify('Account created');
       }
       await api('/login', 'POST', new URLSearchParams({ username, password }));
@@ -229,9 +239,11 @@
         const result = await api<Entry>('/invitations/accept', 'POST', { token: invitationToken });
         invitedProject = result.project_id;
         invitationToken = '';
-        history.replaceState(null, '', location.pathname);
+        replaceState(currentPage.url.pathname + currentPage.url.search, currentPage.state);
       }
-      if (invitedProject) project = String(invitedProject);
+      if (invitedProject) {
+        await goto(href('All Issues', String(invitedProject)), { replaceState: true });
+      }
       await initialize();
     });
   }
@@ -252,7 +264,6 @@
       notifications = [];
       unread = 0;
       project = '';
-      view = 'All Issues';
       settingsTab = 'Account';
       passwordForm = { current: '', replacement: '' };
       userForm = { username: '', displayName: '', kind: 'DEVELOPER', password: '', account: '' };
@@ -264,9 +275,10 @@
       importOpen = false;
       importMarkdown = '';
       importPreview = null;
+      routeSequence++;
       detailSequence++;
       loadSequence++;
-      if (!invitationToken) history.replaceState(null, '', location.pathname);
+      if (!invitationToken) replaceState(currentPage.url.pathname + currentPage.url.search, currentPage.state);
       await refreshCsrf();
     });
   }
@@ -320,30 +332,58 @@
     notificationTotal = data.total;
     unread = data.unread;
   }
-  async function navigate(next: string) {
-    view = next;
+  function href(next: string, selectedProject = project, section = settingsTab) {
+    return pageUrl(next, selectedProject, section);
+  }
+  async function loadPageData() {
+    loadedPage = currentPage.url.pathname + currentPage.url.search;
+    const sequence = ++routeSequence;
+    clearTimeout(searchTimer);
+    project = currentPage.params.projectId ?? currentPage.url.searchParams.get('project') ?? '';
+    settingsTab = !owner && ['People', 'Audit log'].includes(section) ? 'Account' : section;
     page = 0;
     showArchived = false;
     statusFilter = '';
+    priorityFilter = '';
+    query = '';
+    subscribed = false;
     selected = new Set();
-    await run(async () => {
-      if (next === 'Settings') await loadSettings();
-      else if (next === 'Inbox') await loadNotifications();
-      else await loadTasks();
-    });
+    loadSequence++;
+    tasks = [];
+    total = 0;
+    detailSequence++;
+    detail = null;
+    editing = false;
+    error = '';
+    await loadPeople();
+    if (sequence !== routeSequence) return;
+    if (view === 'Settings') await loadSettings();
+    else if (view === 'Inbox') await loadNotifications();
+    else if (['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view)) await loadTasks();
+    if (sequence !== routeSequence) return;
+    await syncTaskFragment();
+  }
+  let routeSequence = 0;
+  let loadedPage = '';
+  async function syncTaskFragment() {
+    const id = new URLSearchParams(currentPage.url.hash.slice(1)).get('task');
+    if (id && id !== task?.identifier) await openTask(id);
+    else if (!id && detail) closeTask();
+  }
+  afterNavigate(() => {
+    if (!me || loading) return;
+    const url = currentPage.url;
+    const work = loadedPage !== url.pathname + url.search ? loadPageData : syncTaskFragment;
+    void work().catch((failure) => { error = (failure as Error).message; });
+  });
+  async function navigate(next: string) {
+    await goto(href(next));
   }
   async function changeProject() {
-    page = 0;
-    await run(async () => {
-      await loadPeople();
-      await loadTasks();
-    });
+    await goto(href(view === 'Project settings' ? 'All Issues' : view));
   }
-  function openProjectSettings(id: number) {
-    project = String(id);
-    view = 'Project settings';
-    closeTask();
-    void run(loadPeople);
+  function projectHref(id: string) {
+    return href(['Settings', 'Projects', 'Inbox', 'Project settings'].includes(view) ? 'All Issues' : view, id);
   }
   async function projectSettingsUpdated() {
     projects = await api<Project[]>('/projects');
@@ -354,9 +394,7 @@
       const result = await api<Entry>('/invitations/accept', 'POST', { token: invitationToken });
       invitationToken = '';
       inviteSignIn = false;
-      history.replaceState(null, '', location.pathname);
-      if (result.project_id) project = String(result.project_id);
-      view = 'All Issues';
+      await goto(href('All Issues', String(result.project_id ?? '')), { replaceState: true });
       await initialize();
       notify('Invitation accepted');
     });
@@ -393,7 +431,7 @@
       people = context.participants;
       await loadDiscussion();
       if (sequence !== detailSequence) return;
-      history.replaceState(null, '', `#task=${id}`);
+      replaceState(`${currentPage.url.pathname}${currentPage.url.search}#task=${encodeURIComponent(id)}`, currentPage.state);
     } catch (e) {
       error = (e as Error).message;
     }
@@ -408,7 +446,7 @@
     detailSequence++;
     detail = null;
     editing = false;
-    history.replaceState(null, '', location.pathname);
+    replaceState(currentPage.url.pathname + currentPage.url.search, currentPage.state);
     void loadPeople().catch((e) => (error = e.message));
   }
   async function loadDiscussion() {
@@ -747,228 +785,16 @@
     }, 60000);
     return () => {
       alive = false;
+      routeSequence++;
+      detailSequence++;
+      loadSequence++;
       clearInterval(poll);
       clearTimeout(searchTimer);
     };
   });
 </script>
 
-<svelte:window onkeydown={keyboard} />
-
-{#if loading}<div class="startup">
-    <div class="brand-mark">f</div>
-    <p>Opening your workspace…</p>
-  </div>
-{:else if !me}
-  <main class="login">
-    <form onsubmit={login}>
-      <div class="brand-mark">f</div>
-      <h1>{invitationToken && !inviteSignIn ? 'Join Forge' : 'Welcome to Forge'}</h1>
-      <p class="muted">A clear path from proposal to shipped.</p>
-      {#if invitationToken && !inviteSignIn}<label
-          >Display name<input bind:value={registrationName} maxlength="100" required /></label
-        >{/if}
-      <label
-        >Username<input
-          bind:value={username}
-          autocomplete="username"
-          pattern={'[A-Za-z0-9_.-]{1,40}'}
-          required
-        /></label
-      ><label
-        >Password<input
-          bind:value={password}
-          type="password"
-          autocomplete={invitationToken && !inviteSignIn ? 'new-password' : 'current-password'}
-          minlength={invitationToken && !inviteSignIn ? 12 : undefined}
-          required
-        /></label
-      >
-      {#if invitationToken && !inviteSignIn}<label
-          >Confirm password<input
-            type="password"
-            bind:value={confirmation}
-            autocomplete="new-password"
-            required
-          /></label
-        >{/if}
-      {#if error}<div class="error">{error}</div>{/if}<button class="primary" disabled={busy}
-        >{invitationToken
-          ? inviteSignIn
-            ? 'Sign in & accept invitation'
-            : 'Create account & join'
-          : 'Sign in'} <span>→</span></button
-      >
-      <p class="fine">
-        {invitationToken
-          ? 'Single-use invitation. Project access is granted when you join.'
-          : 'Ask your workspace owner for an invitation to create an account.'}
-      </p>
-      {#if invitationToken}<button
-          type="button"
-          onclick={() => {
-            inviteSignIn = !inviteSignIn;
-            error = '';
-            password = '';
-            confirmation = '';
-          }}
-          >{inviteSignIn
-            ? 'Create a new account instead'
-            : 'Already have an account? Sign in'}</button
-        >
-        <button
-          type="button"
-          onclick={() => {
-            invitationToken = '';
-            inviteSignIn = false;
-            history.replaceState(null, '', location.pathname);
-            error = '';
-          }}>Back to sign in</button
-        >{/if}
-    </form>
-  </main>
-{:else if invitationToken}
-  <main class="login">
-    <div class="invitation-card">
-      <div class="brand-mark">f</div>
-      <h1>Join a project</h1>
-      <p class="muted">
-        Accept this invitation as @{me.username}. Your role applies to the invited project only. If
-        you already belong to it, your current role is kept.
-      </p>
-      {#if error}<div class="error" role="alert">{error}</div>{/if}
-      <button class="primary" disabled={busy} onclick={acceptInvitation}>Accept invitation</button>
-      <button disabled={busy} onclick={logout}>Use a different account</button>
-      <button
-        disabled={busy}
-        onclick={() => {
-          invitationToken = '';
-          history.replaceState(null, '', location.pathname);
-          error = '';
-        }}>Back to workspace</button
-      >
-    </div>
-  </main>
-{:else}
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="workspace">
-        <div class="brand-mark">f</div>
-        <strong>Forge</strong><span class="workspace-label">WORKSPACE</span>
-      </div>
-      <button class="search-trigger" onclick={focusSearch}
-        ><span>⌕</span> Search issues <kbd>/</kbd></button
-      >
-      <nav>
-        {#each navigation as item}<button
-            class:active={view === item.name}
-            onclick={() => navigate(item.name)}
-            ><span class="nav-icon">{item.icon}</span
-            >{item.name}{#if item.name === 'Inbox' && unread}<span class="counter">{unread}</span
-              >{/if}{#if item.name === 'Approvals'}<span class="nav-dot"></span>{/if}</button
-          >{/each}
-      </nav>
-      <div class="sidebar-heading">
-        PROJECTS {#if owner}<button
-            class="icon-button"
-            aria-label="Create project"
-            onclick={() => projectEditor()}>+</button
-          >{/if}
-      </div>
-      <button
-        class="project-nav"
-        class:chosen={!project}
-        onclick={() => {
-          project = '';
-          if (view === 'Project settings') view = 'All Issues';
-          void changeProject();
-        }}><span class="project-glyph">▦</span>All projects</button
-      >
-      {#each projects as item}<div
-          class="project-nav-row"
-          class:chosen={project === String(item.id)}
-        >
-          <button
-            class="project-nav"
-            class:chosen={project === String(item.id)}
-            onclick={() => {
-              project = String(item.id);
-              if (['Settings', 'Projects', 'Inbox', 'Project settings'].includes(view))
-                view = 'All Issues';
-              void changeProject();
-            }}><span class="project-glyph">{item.key.slice(0, 1)}</span>{item.name}</button
-          >{#if owner}<button
-              class="project-settings-button icon-button"
-              class:active={project === String(item.id) && view === 'Project settings'}
-              aria-label={`Settings for ${item.name}`}
-              title={`Settings for ${item.name}`}
-              disabled={busy}
-              onclick={() => openProjectSettings(item.id)}>⚙</button
-            >{/if}
-        </div>{/each}
-      <div class="sidebar-bottom">
-        <button onclick={() => navigate('Settings')} class:active={view === 'Settings'}
-          ><span class="nav-icon">⚙</span>Settings</button
-        ><button onclick={() => (shortcuts = true)}
-          ><span class="nav-icon">?</span>Keyboard shortcuts<kbd>?</kbd></button
-        >
-        <div class="profile">
-          <span class="avatar">{me.username.slice(0, 2).toUpperCase()}</span>
-          <div><strong>{me.username}</strong><small>{label(me.kind)}</small></div>
-          <button class="icon-button" aria-label="Sign out" onclick={logout}>↪</button>
-        </div>
-      </div>
-    </aside>
-    <main class="main">
-      <header class="topbar">
-        <div class="breadcrumb">
-          Workspace <span>/</span> <strong>{currentProject?.name ?? 'All projects'}</strong><span
-            >/</span
-          >{view}
-        </div>
-        <button class="primary small" onclick={openCreate} disabled={!projects.length}
-          >+ New issue <kbd>C</kbd></button
-        >
-      </header>
-      {#if error}<div role="alert" class="error global-error">
-          <span>{error}</span><button
-            class="icon-button"
-            aria-label="Dismiss error"
-            onclick={() => (error = '')}>×</button
-          >
-        </div>{/if}
-      <div class="view-heading">
-        <div>
-          <h1>
-            {view}<span class="heading-count"
-              >{['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view) ? total : ''}</span
-            >
-          </h1>
-          <p>
-            {view === 'Approvals'
-              ? 'Good work starts with a clear decision. Review proposed changes.'
-              : view === 'Inbox'
-                ? 'The updates that need your attention.'
-                : view === 'Projects'
-                  ? 'Keep the work connected to its context.'
-                  : view === 'Settings'
-                    ? 'Your workspace, people and integrations.'
-                    : view === 'Project settings'
-                      ? 'Manage this project, its members, invitations and roles.'
-                      : view === 'My Issues'
-                        ? 'Your next steps, all in one place.'
-                        : 'Everything your team is moving forward.'}
-          </p>
-        </div>
-        {#if ['All Issues', 'Board'].includes(view)}<div class="view-switch">
-            <button class:active={view === 'All Issues'} onclick={() => navigate('All Issues')}
-              >☷ List</button
-            ><button class:active={view === 'Board'} onclick={() => navigate('Board')}
-              >▥ Board</button
-            >
-          </div>{/if}
-      </div>
-      {#if ['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view)}
+{#snippet issues()}
         <div class="filters">
           <div class="search-field">
             <span>⌕</span><input
@@ -1174,7 +1000,9 @@
           </div>
           <span class="key-hint"><kbd>J</kbd><kbd>K</kbd> navigate <kbd>↵</kbd> open</span>
         </footer>
-      {:else if view === 'Inbox'}
+{/snippet}
+
+{#snippet inbox()}
         <div class="inbox-list">
         <div class="section-toolbar inbox-toolbar">
           <span>{unread} unread notifications</span><button
@@ -1226,7 +1054,9 @@
           >
         </div>
         </div>
-      {:else if view === 'Projects'}
+{/snippet}
+
+{#snippet projectsPage()}
         <div class="section-toolbar">
           <span>{projects.length} projects</span>{#if owner}<div>
               <button
@@ -1244,13 +1074,7 @@
               <span class="project-icon">{p.key.slice(0, 1)}</span>
               <div class="grow">
                 <h2>
-                  <button
-                    class="text-button"
-                    onclick={() => {
-                      project = String(p.id);
-                      view = 'All Issues';
-                      void changeProject();
-                    }}>{p.name}</button
+                  <a class="text-button" href={href('All Issues', String(p.id))}>{p.name}</a
                   ><span class="tag">{p.key}</span>
                 </h2>
                 <p>{p.description || 'No project description yet.'}</p>
@@ -1258,7 +1082,7 @@
                     >{p.repository.replace('https://github.com/', '')} ↗</a
                   >{/if}
               </div>
-              {#if owner}<button onclick={() => openProjectSettings(p.id)}>Project settings</button
+              {#if owner}<a class="project-settings-link" href={href('Project settings', String(p.id))}>Project settings</a
                 >{/if}
             </article>{/each}
         </div>
@@ -1274,16 +1098,22 @@
                 >Create project</button
               >{/if}
           </div>{/if}
-      {:else if view === 'Project settings' && currentProject && owner}
+{/snippet}
+
+{#snippet projectSettings()}
+{#if currentProject && owner}
         {#key currentProject.id}<ProjectSettings
             project={currentProject}
             onUpdated={projectSettingsUpdated}
           />{/key}
-      {:else if view === 'Settings'}
+{/if}
+{/snippet}
+
+{#snippet settings()}
         <div class="settings-tabs">
-          {#each owner ? ['Account', 'People', 'MCP connections', 'Audit log'] : ['Account', 'MCP connections'] as section}<button
+          {#each owner ? ['Account', 'People', 'MCP connections', 'Audit log'] : ['Account', 'MCP connections'] as section}<a href={href('Settings', project, section)}
               class:active={settingsTab === section}
-              onclick={() => (settingsTab = section)}>{section}</button
+              aria-current={settingsTab === section ? 'page' : undefined}>{section}</a
             >{/each}
         </div>
         <div class="settings-content">
@@ -1369,7 +1199,7 @@
                     ><span class="muted">@{user.username}</span><span class="tag"
                       >{label(user.kind)}</span
                     ><button class="connect-mcp" disabled={busy || !user.enabled || !selectedMcpProjects().length} onclick={() => connectMcp(user.id, user.display_name)}>Connect MCP</button><button
-                      disabled={busy || user.id === me.id}
+                      disabled={busy || user.id === me?.id}
                       onclick={() =>
                         run(async () => {
                           await api(`/users/${user.id}`, 'PUT', { enabled: !user.enabled });
@@ -1455,7 +1285,212 @@
               </div>
             </section>{/if}
         </div>
-      {/if}
+{/snippet}
+
+<svelte:head>
+  <title>{view === 'Settings' ? settingsTab + ' · Settings' : view} · Forge</title>
+</svelte:head>
+
+<svelte:window onkeydown={keyboard} />
+
+{#if loading}<div class="startup">
+    <div class="brand-mark">f</div>
+    <p>Opening your workspace…</p>
+  </div>
+{:else if !me}
+  <main class="login">
+    <form onsubmit={login}>
+      <div class="brand-mark">f</div>
+      <h1>{invitationToken && !inviteSignIn ? 'Join Forge' : 'Welcome to Forge'}</h1>
+      <p class="muted">A clear path from proposal to shipped.</p>
+      {#if invitationToken && !inviteSignIn}<label
+          >Display name<input bind:value={registrationName} maxlength="100" required /></label
+        >{/if}
+      <label
+        >Username<input
+          bind:value={username}
+          autocomplete="username"
+          pattern={'[A-Za-z0-9_.-]{1,40}'}
+          required
+        /></label
+      ><label
+        >Password<input
+          bind:value={password}
+          type="password"
+          autocomplete={invitationToken && !inviteSignIn ? 'new-password' : 'current-password'}
+          minlength={invitationToken && !inviteSignIn ? 12 : undefined}
+          required
+        /></label
+      >
+      {#if invitationToken && !inviteSignIn}<label
+          >Confirm password<input
+            type="password"
+            bind:value={confirmation}
+            autocomplete="new-password"
+            required
+          /></label
+        >{/if}
+      {#if error}<div class="error">{error}</div>{/if}<button class="primary" disabled={busy}
+        >{invitationToken
+          ? inviteSignIn
+            ? 'Sign in & accept invitation'
+            : 'Create account & join'
+          : 'Sign in'} <span>→</span></button
+      >
+      <p class="fine">
+        {invitationToken
+          ? 'Single-use invitation. Project access is granted when you join.'
+          : 'Ask your workspace owner for an invitation to create an account.'}
+      </p>
+      {#if invitationToken}<button
+          type="button"
+          onclick={() => {
+            inviteSignIn = !inviteSignIn;
+            error = '';
+            password = '';
+            confirmation = '';
+          }}
+          >{inviteSignIn
+            ? 'Create a new account instead'
+            : 'Already have an account? Sign in'}</button
+        >
+        <button
+          type="button"
+          onclick={() => {
+            invitationToken = '';
+            inviteSignIn = false;
+            replaceState(currentPage.url.pathname + currentPage.url.search, currentPage.state);
+            error = '';
+          }}>Back to sign in</button
+        >{/if}
+    </form>
+  </main>
+{:else if invitationToken}
+  <main class="login">
+    <div class="invitation-card">
+      <div class="brand-mark">f</div>
+      <h1>Join a project</h1>
+      <p class="muted">
+        Accept this invitation as @{me.username}. Your role applies to the invited project only. If
+        you already belong to it, your current role is kept.
+      </p>
+      {#if error}<div class="error" role="alert">{error}</div>{/if}
+      <button class="primary" disabled={busy} onclick={acceptInvitation}>Accept invitation</button>
+      <button disabled={busy} onclick={logout}>Use a different account</button>
+      <button
+        disabled={busy}
+        onclick={() => {
+          invitationToken = '';
+          replaceState(currentPage.url.pathname + currentPage.url.search, currentPage.state);
+          error = '';
+        }}>Back to workspace</button
+      >
+    </div>
+  </main>
+{:else}
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="workspace">
+        <div class="brand-mark">f</div>
+        <strong>Forge</strong><span class="workspace-label">WORKSPACE</span>
+      </div>
+      <button class="search-trigger" onclick={focusSearch}
+        ><span>⌕</span> Search issues <kbd>/</kbd></button
+      >
+      <nav>
+        {#each navigation as item}<a
+            href={href(item.name)}
+            aria-current={view === item.name ? 'page' : undefined}
+            class:active={view === item.name}
+            ><span class="nav-icon">{item.icon}</span
+            >{item.name}{#if item.name === 'Inbox' && unread}<span class="counter">{unread}</span
+              >{/if}{#if item.name === 'Approvals'}<span class="nav-dot"></span>{/if}</a
+          >{/each}
+      </nav>
+      <div class="sidebar-heading">
+        PROJECTS {#if owner}<button
+            class="icon-button"
+            aria-label="Create project"
+            onclick={() => projectEditor()}>+</button
+          >{/if}
+      </div>
+      <a href={projectHref('')} class="project-nav" class:chosen={!project}
+        aria-current={!project && ['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view) ? 'page' : undefined}
+        ><span class="project-glyph">▦</span>All projects</a>
+      {#each projects as item}<div class="project-nav-row" class:chosen={project === String(item.id)}>
+          <a href={projectHref(String(item.id))} class="project-nav"
+            class:chosen={project === String(item.id)}
+            aria-current={project === String(item.id) && ['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view) ? 'page' : undefined}
+            ><span class="project-glyph">{item.key.slice(0, 1)}</span>{item.name}</a>
+          {#if owner}<a href={href('Project settings', String(item.id))}
+              class="project-settings-button icon-button"
+              class:active={project === String(item.id) && view === 'Project settings'}
+              aria-current={project === String(item.id) && view === 'Project settings' ? 'page' : undefined}
+              aria-label={`Settings for ${item.name}`} title={`Settings for ${item.name}`}>⚙</a>{/if}
+        </div>{/each}
+      <div class="sidebar-bottom">
+        <a href={href('Settings')} aria-current={view === 'Settings' ? 'page' : undefined} class:active={view === 'Settings'}
+          ><span class="nav-icon">⚙</span>Settings</a
+        ><button onclick={() => (shortcuts = true)}
+          ><span class="nav-icon">?</span>Keyboard shortcuts<kbd>?</kbd></button
+        >
+        <div class="profile">
+          <span class="avatar">{me.username.slice(0, 2).toUpperCase()}</span>
+          <div><strong>{me.username}</strong><small>{label(me.kind)}</small></div>
+          <button class="icon-button" aria-label="Sign out" onclick={logout}>↪</button>
+        </div>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="breadcrumb">
+          Workspace <span>/</span> <strong>{currentProject?.name ?? 'All projects'}</strong><span
+            >/</span
+          >{view}
+        </div>
+        <button class="primary small" onclick={openCreate} disabled={!projects.length}
+          >+ New issue <kbd>C</kbd></button
+        >
+      </header>
+      {#if error}<div role="alert" class="error global-error">
+          <span>{error}</span><button
+            class="icon-button"
+            aria-label="Dismiss error"
+            onclick={() => (error = '')}>×</button
+          >
+        </div>{/if}
+      <div class="view-heading">
+        <div>
+          <h1>
+            {view}<span class="heading-count"
+              >{['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view) ? total : ''}</span
+            >
+          </h1>
+          <p>
+            {view === 'Approvals'
+              ? 'Good work starts with a clear decision. Review proposed changes.'
+              : view === 'Inbox'
+                ? 'The updates that need your attention.'
+                : view === 'Projects'
+                  ? 'Keep the work connected to its context.'
+                  : view === 'Settings'
+                    ? 'Your workspace, people and integrations.'
+                    : view === 'Project settings'
+                      ? 'Manage this project, its members, invitations and roles.'
+                      : view === 'My Issues'
+                        ? 'Your next steps, all in one place.'
+                        : 'Everything your team is moving forward.'}
+          </p>
+        </div>
+        {#if ['All Issues', 'Board'].includes(view)}<div class="view-switch">
+            <a href={href('All Issues')} class:active={view === 'All Issues'}
+              >☷ List</a
+            ><a href={href('Board')} class:active={view === 'Board'}
+              >▥ Board</a
+            >
+          </div>{/if}
+      </div>
+      {@render children()}
     </main>
   </div>
 

@@ -5,10 +5,15 @@ import dev.forge.tracker.persistence.Database;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Base64;
 import java.util.List;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -100,16 +105,19 @@ public class SecurityConfiguration {
   @Bean
   @Order(2)
   SecurityFilterChain browser(HttpSecurity http) throws Exception {
+    String contentSecurityPolicy = browserContentSecurityPolicy();
     return http.authorizeHttpRequests(
             a ->
-                a.requestMatchers(
+                a.requestMatchers(dev.forge.tracker.common.PageController.PAGE_PATH)
+                    .permitAll()
+                    .requestMatchers(
                         "/api/csrf",
                         "/api/login",
                         "/api/register",
                         "/actuator/health",
                         "/",
                         "/index.html",
-                        "/assets/**",
+                        "/_app/**",
                         "/favicon.svg")
                     .permitAll()
                     .anyRequest()
@@ -144,11 +152,27 @@ public class SecurityConfiguration {
             h ->
                 h.contentSecurityPolicy(
                     c ->
-                        c.policyDirectives(
-                            "default-src 'self'; script-src 'self'; style-src 'self'"
-                                + " 'unsafe-inline'; img-src 'self' blob:; connect-src 'self';"
-                                + " frame-ancestors 'none'; base-uri 'self'; form-action 'self'")))
+                        c.policyDirectives(contentSecurityPolicy)))
         .build();
+  }
+
+  private static String browserContentSecurityPolicy() throws Exception {
+    // SvelteKit's static shell contains a generated inline bootstrap. Allow only its exact bytes.
+    var shell = new ClassPathResource("static/index.html");
+    // API-only development can run beside Vite without a packaged frontend.
+    String html = shell.exists() ? shell.getContentAsString(StandardCharsets.UTF_8) : "";
+    var scripts = Pattern.compile("<script\\b[^>]*>(.*?)</script>", Pattern.DOTALL).matcher(html);
+    var hashes = new StringBuilder();
+    while (scripts.find()) {
+      String script = scripts.group(1);
+      if (!script.isBlank()) {
+        byte[] digest = MessageDigest.getInstance("SHA-256").digest(script.getBytes(StandardCharsets.UTF_8));
+        hashes.append(" 'sha256-").append(Base64.getEncoder().encodeToString(digest)).append("'");
+      }
+    }
+    return "default-src 'self'; script-src 'self'" + hashes
+        + "; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; connect-src 'self';"
+        + " frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
   }
 
   private static void json(HttpServletResponse response, int status, String code, String message)

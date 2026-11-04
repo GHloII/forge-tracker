@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "svelte-check --tsconfig ./tsconfig.json && vite build",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "build": "npm run check && vite build",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "prepare": "svelte-kit sync",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "dompurify": "^3.3.0",
@@ -14,6 +16,9 @@
     "svelte": "^5.43.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.70.3",
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
     "@tailwindcss/vite": "^4.1.17",
     "prettier": "^3.9.10",
