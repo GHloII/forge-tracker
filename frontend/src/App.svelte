@@ -119,14 +119,6 @@
     DONE: '#80bca5',
     CANCELLED: '#777780',
   };
-  const transitions: Record<string, string[]> = {
-    BACKLOG: ['READY', 'CANCELLED'],
-    READY: ['BACKLOG', 'IN_PROGRESS', 'CANCELLED'],
-    IN_PROGRESS: ['READY', 'IN_REVIEW', 'CANCELLED'],
-    IN_REVIEW: ['IN_PROGRESS', 'DONE', 'CANCELLED'],
-    DONE: ['BACKLOG', 'READY'],
-    CANCELLED: ['BACKLOG'],
-  };
   let currentProject = $derived(projects.find((p) => String(p.id) === project));
   let owner = $derived(me?.kind === 'OWNER');
   let canManage = $derived(managesProject(task?.projectId ?? Number(project)));
@@ -1092,7 +1084,7 @@
               <span>{view === 'Approvals' ? 'Submitted' : 'Updated'}</span><span>Actions</span>
             </div>
             {#each tasks as item, i (item.identifier)}
-              <div class="issue-row" class:focused={focusIndex === i} class:selected={selected.has(item.identifier)} id={`row-${i}`}>
+              <div class="issue-row" class:done={item.status === 'DONE'} class:focused={focusIndex === i} class:selected={selected.has(item.identifier)} id={`row-${i}`}>
                 <div class="select-cell"><input type="checkbox" aria-label={`Select ${item.identifier}`} checked={selected.has(item.identifier)} onchange={() => toggleSelect(item.identifier)} /></div>
                 <button class="row-open" onclick={() => { focusIndex = i; void openTask(item.identifier); }} aria-label={`Open ${item.identifier}: ${item.title}`}>
                   <span class="priority" data-priority={item.priority} title={label(item.priority)}>{item.priority === 'URGENT' ? '!' : item.priority === 'NONE' ? '–' : '≡'}</span>
@@ -1117,6 +1109,9 @@
                   </select>
                 </div>
                 <div class="row-actions">
+                  {#if owner && item.approval === 'APPROVED' && item.status !== 'DONE' && !item.archived}
+                    <button class="quick-done" disabled={busy} aria-label={`Mark ${item.identifier} done`} onclick={() => moveTask(item, 'DONE')}>✓ Done</button>
+                  {/if}
                   {#if managesProject(item.projectId)}
                     <button disabled={busy} title={item.archived ? 'Restore issue' : 'Archive issue'} aria-label={`${item.archived ? 'Restore' : 'Archive'} ${item.identifier}`} onclick={() => archiveRow(item)}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 9v11h16V9M3 4h18v5H3z"/>{#if item.archived}<path d="m9 14 3-3 3 3m-3-3v6"/>{:else}<path d="M9 13h6"/>{/if}</svg>
@@ -1180,7 +1175,8 @@
           <span class="key-hint"><kbd>J</kbd><kbd>K</kbd> navigate <kbd>↵</kbd> open</span>
         </footer>
       {:else if view === 'Inbox'}
-        <div class="section-toolbar">
+        <div class="inbox-list">
+        <div class="section-toolbar inbox-toolbar">
           <span>{unread} unread notifications</span><button
             disabled={!unread || busy}
             onclick={() =>
@@ -1190,10 +1186,12 @@
               })}>Mark all as read</button
           >
         </div>
-        <div class="notifications">
+        <div class="notifications compact-inbox">
+          <div class="inbox-head" aria-hidden="true"><span></span><span>Issue</span><span>Title</span><span>Update</span><span>Date</span></div>
           {#each notifications as n}<button
               class="notification"
               class:unread={n.unread}
+              aria-label={`${n.message}: ${n.title}`}
               onclick={() =>
                 run(async () => {
                   await api(`/notifications/${n.id}/read`, 'POST');
@@ -1201,10 +1199,9 @@
                   await openTask(n.identifier);
                 })}
               ><span class="notification-dot"></span>
-              <div>
-                <strong>{n.message}</strong>
-                <p>{n.title}</p>
-              </div>
+              <span class="inbox-identifier">{n.identifier}</span>
+              <strong class="inbox-title">{n.title}</strong>
+              <span class="inbox-event">{n.message.replace(n.identifier + ' · ', '')}</span>
               <time>{date(n.created_at)}</time></button
             >{/each}
         </div>
@@ -1213,7 +1210,7 @@
             <h2>You're all caught up</h2>
             <p>Turn on issue notifications to receive updates here.</p>
           </div>{/if}
-        <div class="pagination">
+        <div class="pagination inbox-pagination">
           <button
             disabled={!notificationPage}
             onclick={() => {
@@ -1227,6 +1224,7 @@
               void run(loadNotifications);
             }}>Next →</button
           >
+        </div>
         </div>
       {:else if view === 'Projects'}
         <div class="section-toolbar">
@@ -1532,7 +1530,7 @@
               value={task.status}
               onchange={(e) => taskAction('status', { status: e.currentTarget.value })}
               ><option value={task.status}>{label(task.status)}</option
-              >{#each transitions[task.status] ?? [] as s}<option value={s}>{label(s)}</option
+              >{#each statuses.filter((s) => s !== task!.status) as s}<option value={s}>{label(s)}</option
                 >{/each}</select
             ><span>Priority</span><strong class="priority-text" data-priority={task.priority}
               >{label(task.priority)}</strong

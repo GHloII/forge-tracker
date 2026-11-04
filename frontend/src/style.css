@@ -2141,6 +2141,8 @@ time {
 .compact-issues .table-head > span { width: auto; padding: 0 6px; font-size: 10px; text-align: left; }
 .compact-issues .table-head > span::after { content: none; }
 .compact-issues .issue-row { min-height: 42px; }
+.compact-issues .issue-row.done { background: rgba(64, 150, 103, 0.16); }
+.compact-issues .issue-row.done .issue-title, .compact-issues .issue-row.done .status-cell { color: #80bca5; }
 .compact-issues .row-open { display: contents; }
 .compact-issues .row-open > span {
   width: auto;
@@ -2166,6 +2168,7 @@ time {
 }
 .row-actions button:hover { background: var(--field); border-color: var(--border); color: var(--text); }
 .row-actions .quick-approve { color: #80bca5; white-space: nowrap; }
+.row-actions .quick-done { color: #80bca5; white-space: nowrap; font-size: 10px; }
 .row-actions .quick-approve span { font-size: 10px; }
 .row-actions .danger-text:hover { color: #df8a80; }
 .row-actions .following { color: var(--accent); }
@@ -2241,3 +2244,26 @@ time {
 .project-add-menu { position: absolute; z-index: 15; top: calc(100% + 5px); right: 0; min-width: 160px; padding: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; box-shadow: 0 8px 24px #0003; }
 .project-add-menu button { display: block; width: 100%; text-align: left; border: 0; margin: 0; }
 .member-list > div .mcp-project-tags button { margin: 0; }
+
+/* Inbox shares the compact issue-list rhythm. */
+.inbox-list { max-width: 1280px; margin: 0 24px; }
+.inbox-list .inbox-toolbar { margin: 0 0 12px; justify-content: flex-start; gap: 16px; }
+.inbox-list .notifications { margin: 0; }
+.compact-inbox { --inbox-columns: 20px 78px minmax(180px, 1fr) 190px 68px; }
+.compact-inbox .inbox-head, .compact-inbox .notification { display: grid; grid-template-columns: var(--inbox-columns); align-items: center; gap: 0; }
+.inbox-head { height: 33px; border-bottom: 1px solid var(--border); color: var(--subtle); font-size: 10px; }
+.inbox-head > span, .compact-inbox .notification > * { min-width: 0; margin: 0; padding: 0 6px; }
+.compact-inbox .notification { min-height: 42px; padding: 0; font-size: 11px; }
+.compact-inbox .notification:hover { background: var(--hover); }
+.compact-inbox .notification:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; background: var(--selected); }
+.compact-inbox .notification-dot { width: 5px; height: 5px; padding: 0; justify-self: center; }
+.compact-inbox .inbox-identifier, .compact-inbox .inbox-event, .compact-inbox time { color: var(--muted); font-size: 10px; }
+.compact-inbox .inbox-title, .compact-inbox .inbox-event { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.compact-inbox .inbox-title { font-size: 12px; font-weight: 450; }
+.compact-inbox .unread .inbox-title { font-weight: 550; }
+.inbox-list .inbox-pagination { justify-content: flex-start; margin: 16px 0; }
+@media (max-width: 750px) {
+  .inbox-list { margin: 0 14px; }
+  .compact-inbox { --inbox-columns: 18px 68px minmax(0, 1fr) 64px; }
+  .compact-inbox .inbox-event, .inbox-head > span:nth-child(4) { display: none; }
+}

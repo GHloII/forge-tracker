@@ -201,24 +201,12 @@ public class TaskService {
     return repository.get(identifier);
   }
 
-  private static final Map<String, Set<String>> TRANSITIONS =
-      Map.of(
-          "BACKLOG",
-          Set.of("READY", "CANCELLED"),
-          "READY",
-          Set.of("BACKLOG", "IN_PROGRESS", "CANCELLED"),
-          "IN_PROGRESS",
-          Set.of("READY", "IN_REVIEW", "CANCELLED"),
-          "IN_REVIEW",
-          Set.of("IN_PROGRESS", "DONE", "CANCELLED"),
-          "DONE",
-          Set.of("BACKLOG", "READY"),
-          "CANCELLED",
-          Set.of("BACKLOG"));
+  private static final Set<String> STATUSES =
+      Set.of("BACKLOG", "READY", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED");
 
   public Task transition(Actor actor, String identifier, int version, String status) {
     Task task = editable(actor, identifier, version);
-    if (status == null || !TRANSITIONS.get(task.status()).contains(status))
+    if (status == null || !STATUSES.contains(status) || status.equals(task.status()))
       throw Problem.conflict("Cannot move " + task.status() + " to " + status + ".");
     if (Set.of("READY", "IN_PROGRESS", "IN_REVIEW", "DONE").contains(status)
         && !task.approval().equals("APPROVED"))
@@ -228,7 +216,7 @@ public class TaskService {
         && !Objects.equals(task.assigneeId(), actor.id()))
       access.require(actor, task.projectId(), MANAGE);
     else canEdit(actor, task);
-    if (status.equals("IN_PROGRESS") && task.assigneeId() == null)
+    if (status.equals("IN_PROGRESS") && task.assigneeId() == null && actor.agent())
       throw Problem.conflict("Assign or claim the task before starting work.");
     touch(task);
     db.execute("UPDATE tasks SET status=? WHERE id=?", status, task.id());

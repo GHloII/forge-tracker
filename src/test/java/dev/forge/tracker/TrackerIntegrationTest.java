@@ -405,6 +405,24 @@ class TrackerIntegrationTest {
   }
 
   @Test
+  void directTransitionsAndDoneSortAcrossPages() {
+    Task task = tasks.create(owner, project, input("Direct move"));
+    task = tasks.approve(owner, task.identifier(), task.version(), "APPROVED", "");
+    task = tasks.transition(owner, task.identifier(), task.version(), "IN_PROGRESS");
+    task = tasks.transition(owner, task.identifier(), task.version(), "DONE");
+    Task active = tasks.create(owner, project, input("Active"));
+    for (String sort : List.of("updated", "created", "title", "priority")) {
+      var first = new TaskRepository.Filter(project, null, null, null, null, null, null,
+          null, null, false, false, sort, 0, 1);
+      var last = new TaskRepository.Filter(project, null, null, null, null, null, null,
+          null, null, false, false, sort, 1, 1);
+      assertThat(tasks.listForUi(owner, first).items().getFirst().get("identifier")).isEqualTo(active.identifier());
+      assertThat(tasks.listForUi(owner, last).items().getFirst().get("identifier")).isEqualTo(task.identifier());
+    }
+    assertThat(tasks.transition(owner, task.identifier(), task.version(), "IN_REVIEW").status()).isEqualTo("IN_REVIEW");
+  }
+
+  @Test
   void rejectedTasksSortLastBeforePagination() {
     Task active = tasks.create(developer, project, input("Z active"));
     Task rejected = tasks.create(developer, project, input("A rejected"));
