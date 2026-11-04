@@ -19,6 +19,7 @@ export interface Person {
   role_id?: number;
   role_name?: string;
   enabled?: number;
+  account_id?: number | null;
 }
 export interface Task {
   id: number;

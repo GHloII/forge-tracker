@@ -23,6 +23,17 @@ public class Access {
 
   public void require(Actor actor, long project, Permission permission) {
     if (actor == null) throw Problem.forbidden();
+    if (actor.agent()) {
+      long account =
+          db.optional(
+                  Long.class,
+                  "SELECT h.id FROM users a JOIN users h ON h.id=a.account_id WHERE a.id=?"
+                      + " AND a.enabled=1 AND h.enabled=1 AND h.kind IN ('OWNER','DEVELOPER')",
+                  actor.id())
+              .orElseThrow(Problem::forbidden);
+      String kind = db.one(String.class, "SELECT kind FROM users WHERE id=?", account);
+      require(new Actor(account, "", kind, null, null, null), project, permission);
+    }
     if (actor.owner()) return;
     if (permission == Permission.APPROVE || permission == Permission.ADMIN)
       throw Problem.forbidden();
@@ -36,7 +47,8 @@ public class Access {
               actor.id());
       if (token.isEmpty()
           || actor.projectId() != project
-          || rank(actor.tokenPermission()) < rank(permission.name())) throw Problem.forbidden();
+          || rank(String.valueOf(token.getFirst().get("permission"))) < rank(permission.name()))
+        throw Problem.forbidden();
     }
     String member =
         db.optional(

@@ -89,7 +89,7 @@
     tokens = $state<Entry[]>([]),
     audit = $state<Entry[]>([]),
     auditPage = $state(0);
-  let userForm = $state({ username: '', displayName: '', kind: 'DEVELOPER', password: '' });
+  let userForm = $state({ username: '', displayName: '', kind: 'DEVELOPER', password: '', account: '' });
   let tokenForm = $state({ user: '', project: '', name: '', permission: 'WRITE', expiresAt: '' }),
     freshToken = $state('');
   let projectForm = $state({ key: '', name: '', description: '', repository: '' }),
@@ -264,7 +264,7 @@
       view = 'All Issues';
       settingsTab = 'Account';
       passwordForm = { current: '', replacement: '' };
-      userForm = { username: '', displayName: '', kind: 'DEVELOPER', password: '' };
+      userForm = { username: '', displayName: '', kind: 'DEVELOPER', password: '', account: '' };
       selected = new Set();
       comments = [];
       activity = [];
@@ -603,10 +603,16 @@
   async function createUser(event: SubmitEvent) {
     event.preventDefault();
     await run(async () => {
-      await api('/users', 'POST', userForm);
-      userForm = { username: '', displayName: '', kind: 'DEVELOPER', password: '' };
+      await api('/users', 'POST', { ...userForm, account: userForm.account ? Number(userForm.account) : null });
+      userForm = { username: '', displayName: '', kind: 'DEVELOPER', password: '', account: '' };
       await loadSettings();
       notify('Participant created');
+    });
+  }
+  async function bindAgentAccount(user: Person, account: string) {
+    await run(async () => {
+      await api(`/users/${user.id}/account`, 'PUT', { account: Number(account) });
+      await loadSettings();
     });
   }
   async function createToken(event: SubmitEvent) {
@@ -1337,7 +1343,19 @@
                       >{user.display_name}</strong
                     ><span class="muted">@{user.username}</span><span class="tag"
                       >{label(user.kind)}</span
-                    ><button
+                    >{#if user.kind === 'AGENT'}
+                      <select
+                        aria-label={'Account for ' + user.display_name}
+                        disabled={busy}
+                        value={user.account_id ?? ''}
+                        onchange={(event) => bindAgentAccount(user, event.currentTarget.value)}
+                      >
+                        <option value="" disabled>Select account</option>
+                        {#each allUsers.filter(u => u.kind !== 'AGENT' && u.enabled) as person}
+                          <option value={person.id}>{person.display_name}</option>
+                        {/each}
+                      </select>
+                    {/if}<button
                       disabled={busy || user.id === me.id}
                       onclick={() =>
                         run(async () => {
@@ -1369,7 +1387,14 @@
                       >Owner / Reviewer</option
                     ><option value="AGENT">Agent</option></select
                   ></label
-                >{#if userForm.kind !== 'AGENT'}<label
+                >{#if userForm.kind === 'AGENT'}
+                  <label>Account<select bind:value={userForm.account} required>
+                    <option value="">Select account</option>
+                    {#each allUsers.filter(u => u.kind !== 'AGENT' && u.enabled) as person}
+                      <option value={String(person.id)}>{person.display_name}</option>
+                    {/each}
+                  </select></label>
+                {/if}{#if userForm.kind !== 'AGENT'}<label
                     >Initial password<input
                       type="password"
                       bind:value={userForm.password}
@@ -1385,7 +1410,7 @@
               <h2>MCP access</h2>
               <p class="muted">
                 Streamable HTTP endpoint: <code>{location.origin}/mcp</code>. Each token belongs to
-                one agent and one project. Approval permissions are never granted.
+                one agent and one project, limited by its linked human account. Approval permissions are never granted.
               </p>
               {#if freshToken}<div class="token-reveal">
                   <strong>Copy this token now. It will not be shown again.</strong><textarea

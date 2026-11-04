@@ -23,12 +23,24 @@ public class ProjectService {
 
   public List<Map<String, Object>> list(Actor actor) {
     if (actor.owner()) return db.rows("SELECT * FROM projects ORDER BY name LIMIT 100");
-    return db.rows(
-        "SELECT p.* FROM projects p JOIN members m ON m.project_id=p.id WHERE m.user_id=? AND (? IS"
-            + " NULL OR p.id=?) ORDER BY p.name LIMIT 100",
-        actor.id(),
-        actor.projectId(),
-        actor.projectId());
+    return db
+        .rows(
+            "SELECT p.* FROM projects p JOIN members m ON m.project_id=p.id WHERE m.user_id=? AND"
+                + " (? IS NULL OR p.id=?) ORDER BY p.name LIMIT 100",
+            actor.id(),
+            actor.projectId(),
+            actor.projectId())
+        .stream()
+        .filter(
+            p -> {
+              try {
+                access.require(actor, ((Number) p.get("id")).longValue(), Access.Permission.READ);
+                return true;
+              } catch (Problem denied) {
+                return false;
+              }
+            })
+        .toList();
   }
 
   public Map<String, Object> context(Actor actor, long id) {
@@ -45,10 +57,10 @@ public class ProjectService {
   public List<Map<String, Object>> participants(Actor actor, long id) {
     access.require(actor, id, Access.Permission.READ);
     return db.rows(
-        "SELECT u.id,u.username,u.display_name,u.kind,coalesce(m.permission,'MANAGE') AS permission,"
-            + " m.role_id,coalesce(r.name,CASE WHEN u.kind='OWNER' THEN 'Workspace owner' ELSE m.permission END) AS role_name"
-            + " FROM users u LEFT JOIN members m ON m.user_id=u.id AND m.project_id=?"
-            + " LEFT JOIN project_roles r ON r.id=m.role_id WHERE"
+        "SELECT u.id,u.username,u.display_name,u.kind,coalesce(m.permission,'MANAGE') AS"
+            + " permission, m.role_id,coalesce(r.name,CASE WHEN u.kind='OWNER' THEN 'Workspace"
+            + " owner' ELSE m.permission END) AS role_name FROM users u LEFT JOIN members m ON"
+            + " m.user_id=u.id AND m.project_id=? LEFT JOIN project_roles r ON r.id=m.role_id WHERE"
             + " u.enabled=1 AND (u.kind='OWNER' OR m.user_id IS NOT NULL) ORDER BY u.display_name"
             + " LIMIT 100",
         id);
@@ -104,9 +116,10 @@ public class ProjectService {
       db.execute("DELETE FROM members WHERE project_id=? AND user_id=?", project, user);
     else
       db.execute(
-          "INSERT INTO members(project_id,user_id,permission,role_id) VALUES(?,?,?,"
-              + " (SELECT id FROM project_roles WHERE project_id=? AND builtin=1 AND permission=?)) ON"
-              + " CONFLICT(project_id,user_id) DO UPDATE SET permission=excluded.permission,role_id=excluded.role_id",
+          "INSERT INTO members(project_id,user_id,permission,role_id) VALUES(?,?,?, (SELECT id FROM"
+              + " project_roles WHERE project_id=? AND builtin=1 AND permission=?)) ON"
+              + " CONFLICT(project_id,user_id) DO UPDATE SET"
+              + " permission=excluded.permission,role_id=excluded.role_id",
           project,
           user,
           permission,
@@ -116,11 +129,23 @@ public class ProjectService {
 
   public List<Map<String, Object>> users(Actor actor) {
     access.admin(actor);
-    return db.rows("SELECT id,username,display_name,kind,enabled FROM users ORDER BY id LIMIT 200");
+    return db.rows(
+        "SELECT id,username,display_name,kind,enabled,account_id FROM users ORDER BY id LIMIT 200");
   }
 
   public long user(Actor actor, String username, String displayName, String kind, String password) {
+    return user(actor, username, displayName, kind, password, actor.id());
+  }
+
+  public long user(
+      Actor actor,
+      String username,
+      String displayName,
+      String kind,
+      String password,
+      Long account) {
     access.admin(actor);
+    if ("AGENT".equals(kind)) validateAccount(account);
     if (username == null
         || !username.matches("[A-Za-z0-9_.-]{1,40}")
         || displayName == null
@@ -131,12 +156,36 @@ public class ProjectService {
       throw Problem.bad("Invalid username, display name or role.");
     if (!kind.equals("AGENT")) validatePassword(password);
     db.execute(
-        "INSERT INTO users(username,display_name,kind,password_hash) VALUES(?,?,?,?)",
+        "INSERT INTO users(username,display_name,kind,password_hash,account_id) VALUES(?,?,?,?,?)",
         username,
         displayName,
         kind,
-        kind.equals("AGENT") ? null : passwords.encode(password));
+        kind.equals("AGENT") ? null : passwords.encode(password),
+        kind.equals("AGENT") ? account : null);
     return db.id();
+  }
+
+  private void validateAccount(Long account) {
+    if (account == null
+        || db.rows(
+                "SELECT id FROM users WHERE id=? AND enabled=1 AND kind IN ('OWNER','DEVELOPER')",
+                account)
+            .isEmpty()) throw Problem.bad("Select an enabled human account for the agent.");
+  }
+
+  public void bindAgent(Actor actor, long user, long account) {
+    access.admin(actor);
+    validateAccount(account);
+    if (!"AGENT"
+        .equals(db.optional(String.class, "SELECT kind FROM users WHERE id=?", user).orElse("")))
+      throw Problem.bad("Only agents can be bound to an account.");
+    db.execute("UPDATE users SET account_id=? WHERE id=?", account, user);
+    db.execute(
+        "INSERT INTO audit(actor_id,action,target,created_at)"
+            + " VALUES(?,'AGENT_ACCOUNT_CHANGED',?,?)",
+        actor.id(),
+        Long.toString(user),
+        java.time.Instant.now().toString());
   }
 
   public void updateUser(Actor actor, long user, boolean enabled, String password) {

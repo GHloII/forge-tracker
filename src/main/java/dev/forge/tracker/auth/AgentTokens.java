@@ -35,6 +35,7 @@ public class AgentTokens {
             """
             SELECT u.id,u.username,u.kind,t.id AS token_id,t.project_id,t.permission AS token_permission
             FROM tokens t JOIN users u ON u.id=t.user_id WHERE t.hash=? AND t.revoked=0 AND u.enabled=1 AND u.kind='AGENT'
+            AND EXISTS (SELECT 1 FROM users h WHERE h.id=u.account_id AND h.enabled=1 AND h.kind IN ('OWNER','DEVELOPER'))
             AND (t.expires_at IS NULL OR julianday(t.expires_at)>julianday(?))
             """,
             hash(raw),

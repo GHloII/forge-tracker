@@ -86,7 +86,8 @@ public class WorkspaceController {
     return projects.users(identity.actor(auth));
   }
 
-  public record UserInput(String username, String displayName, String kind, String password) {}
+  public record UserInput(
+      String username, String displayName, String kind, String password, Long account) {}
 
   @PostMapping("/users")
   public Object user(Authentication auth, @RequestBody UserInput input) {
@@ -97,7 +98,17 @@ public class WorkspaceController {
             input.username(),
             input.displayName(),
             input.kind(),
-            input.password()));
+            input.password(),
+            input.account()));
+  }
+
+  public record AgentAccount(long account) {}
+
+  @PutMapping("/users/{id}/account")
+  public Object bindAgent(
+      Authentication auth, @PathVariable long id, @RequestBody AgentAccount input) {
+    projects.bindAgent(identity.actor(auth), id, input.account());
+    return Map.of("ok", true);
   }
 
   public record UserUpdate(boolean enabled, String password) {}

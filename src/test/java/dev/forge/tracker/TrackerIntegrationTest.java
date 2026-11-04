@@ -97,6 +97,47 @@ class TrackerIntegrationTest {
     agent = tokens.authenticate(token);
   }
 
+  @Test
+  void agentAccessIsCappedByLinkedHumanAccount() {
+    projects.bindAgent(owner, agent.id(), developer.id());
+    projects.member(owner, project, agent.id(), "MANAGE");
+    db.execute("UPDATE tokens SET permission='MANAGE' WHERE id=?", agent.tokenId());
+    access.require(agent, project, Access.Permission.WRITE);
+    assertThatThrownBy(() -> access.require(agent, project, Access.Permission.MANAGE)).isInstanceOf(Problem.class);
+    projects.member(owner, project, developer.id(), "READ");
+    access.require(agent, project, Access.Permission.READ);
+    assertThatThrownBy(() -> tasks.create(agent, project, input("Denied write"))).isInstanceOf(Problem.class);
+    projects.member(owner, project, developer.id(), "REMOVE");
+    assertThat(projects.list(agent)).isEmpty();
+    assertThatThrownBy(() -> access.require(agent, project, Access.Permission.READ)).isInstanceOf(Problem.class);
+    projects.member(owner, project, developer.id(), "MANAGE");
+    access.require(agent, project, Access.Permission.MANAGE);
+    projects.updateUser(owner, developer.id(), false, null);
+    assertThatThrownBy(() -> tokens.authenticate(token)).isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> access.require(agent, project, Access.Permission.READ)).isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> projects.bindAgent(owner, agent.id(), agent.id())).isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> projects.bindAgent(developer, agent.id(), owner.id())).isInstanceOf(Problem.class);
+    projects.bindAgent(owner, agent.id(), owner.id());
+    assertThatThrownBy(() -> access.require(agent, project, Access.Permission.APPROVE)).isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> access.admin(agent)).isInstanceOf(Problem.class);
+    db.execute("UPDATE tokens SET permission='READ' WHERE id=?", agent.tokenId());
+    assertThatThrownBy(() -> access.require(agent, project, Access.Permission.WRITE)).isInstanceOf(Problem.class);
+  }
+
+  @Test
+  void mcpChecksLinkedAccountOnExistingSessions() throws Exception {
+    projects.bindAgent(owner, agent.id(), developer.id());
+    String session = mcpSession(token);
+    assertThat(call(session, "create_task", Map.of("project", project, "title", "Allowed")).path("isError").asBoolean()).isFalse();
+    projects.member(owner, project, developer.id(), "READ");
+    assertThat(call(session, "create_task", Map.of("project", project, "title", "Blocked")).path("isError").asBoolean()).isTrue();
+    assertThat(call(session, "list_tasks", Map.of("project", project)).path("isError").asBoolean()).isFalse();
+    projects.updateUser(owner, developer.id(), false, null);
+    assertThat(rpc(token, session, "tools/list", Map.of(), 5).status()).isEqualTo(401);
+    assertThatThrownBy(() -> projects.user(owner, "unbound", "Unbound", "AGENT", null, null)).isInstanceOf(Problem.class);
+    assertThatThrownBy(() -> projects.user(owner, "nested", "Nested", "AGENT", null, agent.id())).isInstanceOf(Problem.class);
+  }
+
   TaskInput input(String title) {
     return new TaskInput(
         title, "## Scope\nBuild the feature", "FEATURE", "HIGH", "Gameplay", List.of("core"));
