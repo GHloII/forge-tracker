@@ -1,0 +1,136 @@
+--- a/README.md
++++ b/README.md
+@@ -91,3 +91,5 @@
+ .venv/bin/pip install -e '.[dev]'
+ .venv/bin/pytest
+ ```
++
++Svelte (.svelte) inline script blocks are analyzed as TypeScript, including module scripts and rune calls. Template expressions and CSS are excluded. Original source lines and UTF-8 byte offsets are preserved for coverage and mutation tools.
+--- a/src/crapper/cli.py
++++ b/src/crapper/cli.py
+@@ -43,7 +43,7 @@
+ and prints a report sorted worst first.
+
+ Languages: Clojure (.clj .cljc .cljs .bb), Java (.java), Go (.go),
+-TypeScript and JavaScript (.ts .tsx .mts .cts .js .jsx .mjs .cjs),
++TypeScript and JavaScript (.ts .tsx .mts .cts .js .jsx .mjs .cjs), Svelte script blocks (.svelte),
+ Rust (.rs), Python (.py).
+
+ Options:
+--- a/src/crapper/discover.py
++++ b/src/crapper/discover.py
+@@ -4,6 +4,7 @@
+ from pathlib import Path
+
+ EXTENSIONS = {
++    ".svelte": "typescript",
+     ".clj": "clojure",
+     ".cljc": "clojure",
+     ".cljs": "clojure",
+--- /dev/null
++++ b/src/crapper/languages/svelte.py
+@@ -0,0 +1,48 @@
++"""Expose inline Svelte scripts without moving any UTF-8 byte or line position.
++
++Template expressions and styles are deliberately excluded. Svelte runes are
++ordinary call expressions to the TypeScript parser.
++"""
++
++from html.parser import HTMLParser
++
++
++class _Scripts(HTMLParser):
++    def __init__(self, source: str):
++        super().__init__(convert_charrefs=False)
++        self.source = source
++        self.lines = [0]
++        self.lines.extend(i + 1 for i, char in enumerate(source) if char == '\n')
++        self.spans: list[tuple[int, int]] = []
++        self.in_script = False
++
++    def handle_starttag(self, tag, attrs):
++        if tag == 'script':
++            attributes = dict(attrs)
++            self.in_script = 'src' not in attributes and attributes.get('type', '').lower() in {
++                '', 'module', 'text/javascript', 'application/javascript',
++                'text/ecmascript', 'application/ecmascript',
++            }
++
++    def handle_endtag(self, tag):
++        if tag == 'script':
++            self.in_script = False
++
++    def handle_data(self, data):
++        if self.in_script:
++            row, col = self.getpos()
++            start = self.lines[row - 1] + col
++            self.spans.append((start, start + len(data)))
++
++
++def script_source(source: str) -> str:
++    parser = _Scripts(source)
++    parser.feed(source)
++    parser.close()
++    original = source.encode('utf-8')
++    masked = bytearray(byte if byte in (10, 13) else 32 for byte in original)
++    for start, end in parser.spans:
++        first = len(source[:start].encode('utf-8'))
++        last = first + len(source[start:end].encode('utf-8'))
++        masked[first:last] = original[first:last]
++    return masked.decode('utf-8')
+--- a/src/crapper/languages/typescript.py
++++ b/src/crapper/languages/typescript.py
+@@ -103,7 +103,7 @@
+
+
+ def _strip_script_suffix(relative: str) -> str:
+-    for suffix in (".tsx", ".mts", ".cts", ".jsx", ".mjs", ".cjs", ".ts", ".js"):
++    for suffix in (".svelte", ".tsx", ".mts", ".cts", ".jsx", ".mjs", ".cjs", ".ts", ".js"):
+         if relative.endswith(suffix):
+             return relative[: -len(suffix)]
+     return relative
+@@ -381,6 +381,10 @@
+ def functions_in_source(
+     source: str, path: str, source_root: str | None = None
+ ) -> list[Function]:
++    if path.endswith(".svelte"):
++        from crapper.languages.svelte import script_source
++
++        source = script_source(source)
+     data, tree = parse(source, _grammar(path))
+     module = _module_namespace(path, source_root)
+     found: list[tuple[int, Function]] = []
+--- /dev/null
++++ b/tests/test_svelte.py
+@@ -0,0 +1,31 @@
++from crapper.discover import language_of
++from crapper.languages.typescript import functions_in_source
++
++
++def test_component_functions_keep_original_lines_and_ignore_markup():
++    source = '''<!-- <script>function fake() { return false; }</script> -->
++<script lang="ts">
++function choose(n: number) { return n > 0 ? 1 : 0; }
++</script>
++<button onclick={() => true}>Привет</button>
++<style>.x { color: red; }</style>'''
++    assert language_of('src/View.svelte') == 'typescript'
++    functions = functions_in_source(source, 'src/View.svelte', '/proj')
++    assert [(fn.name, fn.start_line, fn.complexity) for fn in functions] == [('choose', 3, 2)]
++
++
++def test_mask_preserves_utf8_offsets_and_script_text():
++    from crapper.languages.svelte import script_source
++    source = 'Привет\r\n<script lang="ts" data-test=">">\r\nconst n = $state(1);\r\n</script>\r\n<p>{n > 0}</p>'
++    masked = script_source(source).encode()
++    original = source.encode()
++    assert len(masked) == len(original)
++    start = original.index(b'const')
++    assert masked[start:start + 20] == original[start:start + 20]
++    assert [i for i, b in enumerate(masked) if b in (10, 13)] == [i for i, b in enumerate(original) if b in (10, 13)]
++    assert b'<p>' not in masked
++
++
++def test_both_module_and_instance_scripts_are_found():
++    source = '<script module>export function shared() { return true; }</script>\n<script>function local() { return false; }</script>'
++    assert [fn.name for fn in functions_in_source(source, 'Both.svelte')] == ['shared', 'local']

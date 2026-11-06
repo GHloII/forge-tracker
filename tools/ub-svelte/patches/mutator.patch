@@ -1,0 +1,89 @@
+--- a/src/mutator/sites.py
++++ b/src/mutator/sites.py
+@@ -358,6 +358,10 @@
+     """Mutation sites in source order. Offsets are UTF-8 byte offsets."""
+
+     crapper = ensure_crapper()
++    if path.endswith(".svelte"):
++        from crapper.languages.svelte import script_source
++
++        source = script_source(source)
+     data = source.encode("utf-8")
+     grammar = _grammar(language, path)
+     _data, tree = crapper.languages.treesitter.parse(source, grammar)
+--- a/src/mutator/workers.py
++++ b/src/mutator/workers.py
+@@ -136,7 +136,7 @@
+ _SPECIFIER = re.compile(
+     r"""(?:from|import|require)\s*\(?\s*['"](\.[^'"]+)['"]""",
+ )
+-_EXTENSIONS = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs")
++_EXTENSIONS = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".svelte")
+
+
+ def _specifiers(text: str) -> list[str]:
+@@ -149,7 +149,7 @@
+
+
+ def _stem(base: Path) -> Path:
+-    if base.suffix in _EXTENSIONS:
++    if base.suffix in _EXTENSIONS and base.suffix != ".svelte":
+         return Path(str(base)[: -len(base.suffix)])
+     return base
+
+--- /dev/null
++++ b/tests/test_svelte.py
+@@ -0,0 +1,53 @@
++from mutator.sites import apply_site, discover_raw
++from mutator.functions import sites_in_file
++from mutator.workers import importers_of
++
++
++def test_svelte_mutates_both_scripts_at_original_unicode_byte_offsets():
++    source = '''<!-- Ж😀 -->
++<script module lang="ts">
++export function moduleCheck(x: number) { return x > 0; }
++</script>
++<p>{value > 0 ? 1 : 0}</p>
++<script lang="ts">
++function instanceCheck(x: number) { return x < 1; }
++</script>
++<style>.thing { opacity: 0; }</style>
++'''
++    sites = discover_raw(source, "typescript", "Component.svelte")
++    assert {site.line for site in sites} == {3, 7}
++    assert {site.original for site in sites} >= {">", "<", "0", "1"}
++    raw = source.encode("utf-8")
++    for site in sites:
++        assert raw[site.start:site.end].decode("utf-8") == site.original
++        mutated = apply_site(source, site.start, site.end, site.mutant)
++        assert mutated.encode("utf-8") == raw[:site.start] + site.mutant.encode("utf-8") + raw[site.end:]
++        assert '<p>{value > 0 ? 1 : 0}</p>' in mutated
++        assert '<style>.thing { opacity: 0; }</style>' in mutated
++
++
++def test_svelte_without_script_has_no_mutation_sites():
++    assert discover_raw('<p>{value > 0 ? true : false}</p>', "typescript", "Component.svelte") == []
++
++
++def test_svelte_sites_bind_to_the_original_component_function(tmp_path):
++    source = '<p>Ж😀</p>\n<script lang="ts">\nfunction increase(x: number) { return x + 1; }\n</script>'
++    path = tmp_path / "Component.svelte"
++    path.write_text(source, encoding="utf-8")
++    sites = sites_in_file(source, path, tmp_path, "Component.svelte")
++    assert {(site.form_id, site.line) for site in sites} == {("defn/increase", 3)}
++    assert ("+", "-") in {(site.original, site.mutant) for site in sites}
++
++
++def test_mutation_workers_copy_svelte_importers_and_their_importers(tmp_path):
++    (tmp_path / "logic.ts").write_text("export const value = true;", encoding="utf-8")
++    (tmp_path / "Component.svelte").write_text('<script>import {value} from "./logic";</script>', encoding="utf-8")
++    (tmp_path / "test.ts").write_text('import Component from "./Component.svelte";', encoding="utf-8")
++    assert importers_of(tmp_path, "logic.ts") == {"Component.svelte", "test.ts"}
++
++
++def test_explicit_svelte_import_does_not_resolve_to_same_named_typescript(tmp_path):
++    (tmp_path / "Component.ts").write_text("export const unrelated = true;", encoding="utf-8")
++    (tmp_path / "Component.svelte").write_text('<p>hello</p>', encoding="utf-8")
++    (tmp_path / "test.ts").write_text('import Component from "./Component.svelte";', encoding="utf-8")
++    assert importers_of(tmp_path, "Component.ts") == set()

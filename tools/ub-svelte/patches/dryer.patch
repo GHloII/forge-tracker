@@ -1,0 +1,157 @@
+--- a/README.md
++++ b/README.md
+@@ -1,4 +1,9 @@
+ # dryer
++
++Svelte (`.svelte`) files are analyzed as TypeScript script blocks. Both module
++and instance scripts retain their original source lines and UTF-8 byte offsets.
++Markup, styles, and template expressions are excluded. The extraction helper is
++also used by crapper and mutator; dryer keeps its own copy to remain standalone.
+
+ dryer finds candidate duplicate code in Clojure, Java, Go, TypeScript, Rust, and Python. One run detects the language of each source file, normalizes that language's forms, and reports pairs whose structure is close enough to review.
+
+--- a/src/dryer/cli.py
++++ b/src/dryer/cli.py
+@@ -30,7 +30,7 @@
+ Prints a report and writes .metrics/dry.edn.
+
+ Languages: Clojure (.clj .cljc .cljs .cljd .bb), Java (.java), Go (.go),
+-TypeScript (.ts .tsx .mts .cts), Rust (.rs), Python (.py).
++TypeScript (.ts .tsx .mts .cts .svelte), Rust (.rs), Python (.py).
+
+ Options:
+   -h, --help                    Print this help and exit.
+--- a/src/dryer/discover.py
++++ b/src/dryer/discover.py
+@@ -17,6 +17,7 @@
+     ".go": "go",
+     ".ts": "typescript",
+     ".tsx": "typescript",
++    ".svelte": "typescript",
+     ".mts": "typescript",
+     ".cts": "typescript",
+     ".rs": "rust",
+--- a/src/dryer/extract.py
++++ b/src/dryer/extract.py
+@@ -13,6 +13,7 @@
+ from dryer.clojure_read import read_source
+ from dryer.model import Entry
+ from dryer.shape import fingerprints, node_count
++from dryer.svelte import script_source
+ from dryer.treesitter import child_of_type, descendants, end_line, node_text, parse, start_line
+
+ _TS_FUNCTION = {
+@@ -195,6 +196,8 @@
+
+
+ def entries_in_source(language: str, source: str, path: str, file: str) -> tuple[list[Entry], str | None]:
++    if path.endswith(".svelte"):
++        source = script_source(source)
+     if language == "clojure":
+         return _clojure_entries(source, file)
+     if language not in _PICKERS:
+--- /dev/null
++++ b/src/dryer/svelte.py
+@@ -0,0 +1,48 @@
++"""Expose inline Svelte scripts without moving any UTF-8 byte or line position.
++
++Template expressions and styles are deliberately excluded. Svelte runes are
++ordinary call expressions to the TypeScript parser.
++"""
++
++from html.parser import HTMLParser
++
++
++class _Scripts(HTMLParser):
++    def __init__(self, source: str):
++        super().__init__(convert_charrefs=False)
++        self.source = source
++        self.lines = [0]
++        self.lines.extend(i + 1 for i, char in enumerate(source) if char == '\n')
++        self.spans: list[tuple[int, int]] = []
++        self.in_script = False
++
++    def handle_starttag(self, tag, attrs):
++        if tag == 'script':
++            attributes = dict(attrs)
++            self.in_script = 'src' not in attributes and attributes.get('type', '').lower() in {
++                '', 'module', 'text/javascript', 'application/javascript',
++                'text/ecmascript', 'application/ecmascript',
++            }
++
++    def handle_endtag(self, tag):
++        if tag == 'script':
++            self.in_script = False
++
++    def handle_data(self, data):
++        if self.in_script:
++            row, col = self.getpos()
++            start = self.lines[row - 1] + col
++            self.spans.append((start, start + len(data)))
++
++
++def script_source(source: str) -> str:
++    parser = _Scripts(source)
++    parser.feed(source)
++    parser.close()
++    original = source.encode('utf-8')
++    masked = bytearray(byte if byte in (10, 13) else 32 for byte in original)
++    for start, end in parser.spans:
++        first = len(source[:start].encode('utf-8'))
++        last = first + len(source[start:end].encode('utf-8'))
++        masked[first:last] = original[first:last]
++    return masked.decode('utf-8')
+--- /dev/null
++++ b/tests/test_svelte.py
+@@ -0,0 +1,51 @@
++from dryer.discover import language_of
++from dryer.extract import entries_in_source
++from dryer.scan import find_duplicates
++from dryer.scan import scan_files
++
++
++SOURCE = '''<script module lang="ts">
++export function shared(xs: number[]) {
++  return xs.filter(x => x > 0);
++}
++</script>
++<h1>Привет</h1>
++<script lang="ts">
++function instance(items: number[]) {
++  return items.filter(item => item > 0);
++}
++</script>
++<button onclick={() => false}>Run</button>
++<style>.x { width: calc(1px + 2px); }</style>
++'''
++
++
++def test_svelte_is_discovered_as_typescript():
++    assert language_of('Widget.svelte') == 'typescript'
++
++
++def test_svelte_compares_both_scripts_and_keeps_source_lines():
++    entries, warning = entries_in_source('typescript', SOURCE, 'Widget.svelte', 'Widget.svelte')
++    assert warning is None
++    assert [(entry.start_line, entry.end_line) for entry in entries] == [(2, 4), (8, 10)]
++    duplicates = find_duplicates(entries, threshold=0.99)
++    assert len(duplicates) == 1
++
++
++def test_svelte_does_not_treat_markup_or_style_as_functions():
++    source = '<button onclick={() => true}>Run</button><style>function fake() {}</style>'
++    entries, warning = entries_in_source('typescript', source, 'Empty.svelte', 'Empty.svelte')
++    assert entries == []
++    assert warning is None
++
++
++def test_svelte_and_typescript_duplicates_are_compared(tmp_path):
++    component = tmp_path / 'Widget.svelte'
++    module = tmp_path / 'helpers.ts'
++    component.write_text(SOURCE, encoding='utf-8')
++    module.write_text('export function positives(values: number[]) {\n'
++                      '  return values.filter(value => value > 0);\n}\n', encoding='utf-8')
++    entries, warnings = scan_files([component, module], tmp_path, min_lines=1, min_nodes=1)
++    assert warnings == []
++    duplicates = find_duplicates(entries, threshold=0.99)
++    assert any(pair.left.file != pair.right.file for pair in duplicates)
