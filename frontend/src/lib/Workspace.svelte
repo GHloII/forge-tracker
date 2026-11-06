@@ -777,8 +777,8 @@
     setTheme(localStorage.getItem('forge-theme') ?? 'dark');
     let alive = true;
     initialize()
-      .catch(() => {
-        me = null;
+      .catch((failure) => {
+        if (me) error = (failure as Error).message;
       })
       .finally(() => {
         if (alive) loading = false;

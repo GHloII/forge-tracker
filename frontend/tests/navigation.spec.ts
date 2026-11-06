@@ -37,6 +37,30 @@ test.beforeEach(async ({ context }) => {
   });
 });
 
+for (const status of [403, 404]) {
+  test(`unavailable project (${status}) keeps the signed-in workspace usable`, async ({ page }) => {
+    await page.route('**/api/projects/999999', (route) => route.fulfill({
+      status, json: { message: 'Project unavailable.' },
+    }));
+    await page.goto('/issues?project=999999');
+    await expect(page.getByRole('alert')).toContainText('Project unavailable.');
+    await expect(page.getByRole('heading', { name: 'Welcome to Forge' })).toHaveCount(0);
+    await page.locator('.sidebar').getByRole('link', { name: 'All projects', exact: false }).click();
+    await expect(page).toHaveURL('/issues');
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'All Issues', exact: false })).toBeVisible();
+  });
+}
+
+test('an unauthenticated visitor still sees sign in', async ({ page }) => {
+  await page.route('**/api/me', (route) => route.fulfill({
+    status: 401, json: { message: 'Authentication required.' },
+  }));
+  await page.goto('/issues');
+  await expect(page.getByRole('heading', { name: 'Welcome to Forge' })).toBeVisible();
+  await expect(page.locator('.app-shell')).toHaveCount(0);
+});
+
 test('issue columns fit their contents and priority indicators match their values', async ({ page }) => {
   const priorities = ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'];
   const approvals = ['PENDING', 'APPROVED', 'CHANGES_REQUESTED', 'REJECTED', 'PENDING'];
