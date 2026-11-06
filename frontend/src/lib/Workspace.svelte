@@ -13,6 +13,7 @@
     get projectSettings() { return projectSettings; },
     get settings() { return settings; },
   });
+  import LoadingIndicator from './LoadingIndicator.svelte';
   import Markdown from './Markdown.svelte';
   import ProjectSettings from './ProjectSettings.svelte';
   import {
@@ -34,6 +35,15 @@
     loading = $state(true),
     error = $state(''),
     busy = $state(false);
+  let pending = $state({ page: 0, tasks: 0, notifications: 0, settings: 0, detail: 0, discussion: 0 });
+  async function withLoading(key: keyof typeof pending, action: () => Promise<void>) {
+    pending[key]++;
+    try {
+      await action();
+    } finally {
+      pending[key]--;
+    }
+  }
   let invitationToken = $state('');
   let inviteSignIn = $state(false);
   let registrationName = $state(''),
@@ -303,70 +313,76 @@
   }
   let loadSequence = 0;
   async function loadTasks() {
-    const sequence = ++loadSequence;
-    const params = new URLSearchParams({
-      page: String(page),
-      size: '50',
-      sort,
-      archived: String(showArchived),
-      subscribed: String(subscribed),
+    await withLoading('tasks', async () => {
+      const sequence = ++loadSequence;
+      const params = new URLSearchParams({
+        page: String(page),
+        size: '50',
+        sort,
+        archived: String(showArchived),
+        subscribed: String(subscribed),
+      });
+      if (project) params.set('project', project);
+      if (query) params.set('q', query);
+      if (statusFilter) params.set('status', statusFilter);
+      if (priorityFilter) params.set('priority', priorityFilter);
+      if (view === 'My Issues' && me) params.set('assignee', String(me.id));
+      if (view === 'Approvals') params.set('approval', 'PENDING');
+      const result = await api<Page<Task>>('/tasks?' + params);
+      if (sequence !== loadSequence) return;
+      tasks = result.items;
+      total = result.total;
+      selected = new Set();
+      rowReview = null;
+      focusIndex = 0;
     });
-    if (project) params.set('project', project);
-    if (query) params.set('q', query);
-    if (statusFilter) params.set('status', statusFilter);
-    if (priorityFilter) params.set('priority', priorityFilter);
-    if (view === 'My Issues' && me) params.set('assignee', String(me.id));
-    if (view === 'Approvals') params.set('approval', 'PENDING');
-    const result = await api<Page<Task>>('/tasks?' + params);
-    if (sequence !== loadSequence) return;
-    tasks = result.items;
-    total = result.total;
-    selected = new Set();
-    rowReview = null;
-    focusIndex = 0;
   }
   async function loadNotifications() {
-    if (!me) return;
-    const actorId = me.id;
-    const data = await api<Entry>(`/notifications?page=${notificationPage}`);
-    if (me?.id !== actorId) return;
-    notifications = data.items;
-    notificationTotal = data.total;
-    unread = data.unread;
+    await withLoading('notifications', async () => {
+      if (!me) return;
+      const actorId = me.id;
+      const data = await api<Entry>(`/notifications?page=${notificationPage}`);
+      if (me?.id !== actorId) return;
+      notifications = data.items;
+      notificationTotal = data.total;
+      unread = data.unread;
+    });
   }
   function href(next: string, selectedProject = project, section = settingsTab) {
     return pageUrl(next, selectedProject, section);
   }
   async function loadPageData() {
-    loadedPage = currentPage.url.pathname + currentPage.url.search;
-    const sequence = ++routeSequence;
-    clearTimeout(searchTimer);
-    project = currentPage.params.projectId ?? currentPage.url.searchParams.get('project') ?? '';
-    settingsTab = !owner && ['People', 'Audit log'].includes(section) ? 'Account' : section;
-    page = 0;
-    showArchived = false;
-    statusFilter = '';
-    priorityFilter = '';
-    query = '';
-    subscribed = false;
-    selected = new Set();
-    loadSequence++;
-    tasks = [];
-    total = 0;
-    detailSequence++;
-    detail = null;
-    editing = false;
-    error = '';
-    await loadPeople();
-    if (sequence !== routeSequence) return;
-    if (view === 'Settings') await loadSettings();
-    else if (view === 'Inbox') await loadNotifications();
-    else if (['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view)) await loadTasks();
-    if (sequence !== routeSequence) return;
-    await syncTaskFragment();
+    await withLoading('page', async () => {
+      loadedPage = currentPage.url.pathname + currentPage.url.search;
+      const sequence = ++routeSequence;
+      clearTimeout(searchTimer);
+      project = currentPage.params.projectId ?? currentPage.url.searchParams.get('project') ?? '';
+      settingsTab = !owner && ['People', 'Audit log'].includes(section) ? 'Account' : section;
+      page = 0;
+      showArchived = false;
+      statusFilter = '';
+      priorityFilter = '';
+      query = '';
+      subscribed = false;
+      selected = new Set();
+      loadSequence++;
+      tasks = [];
+      total = 0;
+      detailSequence++;
+      detail = null;
+      editing = false;
+      error = '';
+      await loadPeople();
+      if (sequence !== routeSequence) return;
+      if (view === 'Settings') await loadSettings();
+      else if (view === 'Inbox') await loadNotifications();
+      else if (['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view)) await loadTasks();
+      if (sequence !== routeSequence) return;
+      await syncTaskFragment();
+    });
   }
   let routeSequence = 0;
-  let loadedPage = '';
+  let loadedPage = $state('');
   async function syncTaskFragment() {
     const id = new URLSearchParams(currentPage.url.hash.slice(1)).get('task');
     if (id && id !== task?.identifier) await openTask(id);
@@ -411,32 +427,34 @@
   }
   let detailSequence = 0;
   async function openTask(id: string) {
-    const sequence = ++detailSequence;
-    const actorId = me?.id;
-    error = '';
-    revisionPreview = null;
-    try {
-      const data = await api<Entry>(`/tasks/${encodeURIComponent(id)}`);
-      if (me?.id !== actorId || sequence !== detailSequence) return;
-      detail = data;
-      comments = [];
-      activity = [];
-      editing = false;
-      preview = false;
-      feedback = '';
-      comment = '';
-      commentPage = 0;
-      activityPage = 0;
-      const context = await api<Entry>(`/projects/${data.task.projectId}`);
-      if (me?.id !== actorId || sequence !== detailSequence) return;
-      projectPeople[data.task.projectId] = context.participants;
-      people = context.participants;
-      await loadDiscussion();
-      if (sequence !== detailSequence) return;
-      replaceState(`${currentPage.url.pathname}${currentPage.url.search}#task=${encodeURIComponent(id)}`, currentPage.state);
-    } catch (e) {
-      error = (e as Error).message;
-    }
+    await withLoading('detail', async () => {
+      const sequence = ++detailSequence;
+      const actorId = me?.id;
+      error = '';
+      revisionPreview = null;
+      try {
+        const data = await api<Entry>(`/tasks/${encodeURIComponent(id)}`);
+        if (me?.id !== actorId || sequence !== detailSequence) return;
+        detail = data;
+        comments = [];
+        activity = [];
+        editing = false;
+        preview = false;
+        feedback = '';
+        comment = '';
+        commentPage = 0;
+        activityPage = 0;
+        const context = await api<Entry>(`/projects/${data.task.projectId}`);
+        if (me?.id !== actorId || sequence !== detailSequence) return;
+        projectPeople[data.task.projectId] = context.participants;
+        people = context.participants;
+        await loadDiscussion();
+        if (sequence !== detailSequence) return;
+        replaceState(`${currentPage.url.pathname}${currentPage.url.search}#task=${encodeURIComponent(id)}`, currentPage.state);
+      } catch (e) {
+        error = (e as Error).message;
+      }
+    });
   }
   async function focusSearch() {
     if (!['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view))
@@ -452,17 +470,19 @@
     void loadPeople().catch((e) => (error = e.message));
   }
   async function loadDiscussion() {
-    if (!task) return;
-    const id = task.identifier;
-    const [c, a] = await Promise.all([
-      api<Page<Entry>>(`/tasks/${id}/comments?page=${commentPage}`),
-      api<Page<Entry>>(`/tasks/${id}/activity?page=${activityPage}`),
-    ]);
-    if (task?.identifier !== id) return;
-    comments = c.items;
-    commentTotal = c.total;
-    activity = a.items;
-    activityTotal = a.total;
+    await withLoading('discussion', async () => {
+      if (!task) return;
+      const id = task.identifier;
+      const [c, a] = await Promise.all([
+        api<Page<Entry>>(`/tasks/${id}/comments?page=${commentPage}`),
+        api<Page<Entry>>(`/tasks/${id}/activity?page=${activityPage}`),
+      ]);
+      if (task?.identifier !== id) return;
+      comments = c.items;
+      commentTotal = c.total;
+      activity = a.items;
+      activityTotal = a.total;
+    });
   }
   async function refreshTask() {
     if (task) detail = await api(`/tasks/${task.identifier}`);
@@ -624,12 +644,14 @@
     });
   }
   async function loadSettings() {
-    if (!owner) { tokens = await api<Entry[]>('/tokens'); return; }
-    [allUsers, tokens, audit] = await Promise.all([
-      api<Person[]>('/users'),
-      api<Entry[]>('/tokens'),
-      api<Entry[]>(`/audit?page=${auditPage}`),
-    ]);
+    await withLoading('settings', async () => {
+      if (!owner) { tokens = await api<Entry[]>('/tokens'); return; }
+      [allUsers, tokens, audit] = await Promise.all([
+        api<Person[]>('/users'),
+        api<Entry[]>('/tokens'),
+        api<Entry[]>(`/audit?page=${auditPage}`),
+      ]);
+    });
   }
   async function createUser(event: SubmitEvent) {
     event.preventDefault();
@@ -859,6 +881,9 @@
             />Archived</label
           >
         </div>
+        {#if pending.tasks}
+          <LoadingIndicator label="Loading issues…" />
+        {:else}
         {#if selected.size && owner}<div class="bulk-bar">
             {selected.size} selected<button disabled={busy} onclick={bulkArchive}
               >{showArchived ? 'Restore' : 'Archive'} selected</button
@@ -1004,9 +1029,11 @@
           </div>
           <span class="key-hint"><kbd>J</kbd><kbd>K</kbd> navigate <kbd>↵</kbd> open</span>
         </footer>
+        {/if}
 {/snippet}
 
 {#snippet inbox()}
+{#if pending.notifications}<LoadingIndicator label="Loading notifications…" />{:else}
         <div class="inbox-list">
         <div class="section-toolbar inbox-toolbar">
           <span>{unread} unread notifications</span><button
@@ -1058,6 +1085,7 @@
           >
         </div>
         </div>
+{/if}
 {/snippet}
 
 {#snippet projectsPage()}
@@ -1114,6 +1142,7 @@
 {/snippet}
 
 {#snippet settings()}
+{#if pending.settings}<LoadingIndicator label="Loading settings…" />{:else}
         <div class="settings-tabs">
           {#each owner ? ['Account', 'People', 'MCP connections', 'Audit log'] : ['Account', 'MCP connections'] as section}<a href={href('Settings', project, section)}
               class:active={settingsTab === section}
@@ -1289,6 +1318,7 @@
               </div>
             </section>{/if}
         </div>
+{/if}
 {/snippet}
 
 <svelte:head>
@@ -1299,7 +1329,7 @@
 
 {#if loading}<div class="startup">
     <div class="brand-mark">f</div>
-    <p>Opening your workspace…</p>
+    <LoadingIndicator label="Opening your workspace…" />
   </div>
 {:else if !me}
   <main class="login">
@@ -1467,7 +1497,7 @@
         <div>
           <h1>
             {view}<span class="heading-count"
-              >{['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view) ? total : ''}</span
+              >{!pending.page && !pending.tasks && loadedPage === currentPage.url.pathname + currentPage.url.search && ['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view) ? total : ''}</span
             >
           </h1>
           <p>
@@ -1494,11 +1524,20 @@
             >
           </div>{/if}
       </div>
-      {@render children()}
+      {#if pending.page || loadedPage !== currentPage.url.pathname + currentPage.url.search}
+        <LoadingIndicator label="Loading content…" />
+      {:else}
+        {@render children()}
+      {/if}
     </main>
   </div>
 
-  {#if task}
+  {#if pending.detail}
+    <aside class="detail-panel" aria-label="Loading issue">
+      <header class="panel-header"><span>Issue</span></header>
+      <LoadingIndicator label="Loading issue…" />
+    </aside>
+  {:else if task}
     <aside class="detail-panel" aria-label={`Issue ${task.identifier}`}>
       <header class="panel-header">
         <span
@@ -1739,7 +1778,8 @@
             >Activity</button
           >
         </div>
-        {#if tab === 'Comments'}<div class="comments">
+        {#if pending.discussion}<LoadingIndicator label={tab === 'Comments' ? 'Loading comments…' : 'Loading activity…'} />
+        {:else if tab === 'Comments'}<div class="comments">
             {#each comments as entry}<article>
                 <div class="comment-heading">
                   <span class="avatar tiny">{entry.author.slice(0, 2)}</span><strong

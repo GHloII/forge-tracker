@@ -61,6 +61,47 @@ test('an unauthenticated visitor still sees sign in', async ({ page }) => {
   await expect(page.locator('.app-shell')).toHaveCount(0);
 });
 
+test('navigation shows loading until issues arrive, then shows the empty state', async ({ page }) => {
+  await page.goto('/projects');
+  await expect(page.getByRole('heading', { name: 'Projects', exact: false })).toBeVisible();
+  let release!: () => void;
+  const responseReady = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/tasks?**', async (route) => {
+    await responseReady;
+    await route.fulfill({ json: { items: [], total: 0, page: 0, size: 50 } });
+  });
+  try {
+    await page.locator('.sidebar').getByRole('link', { name: 'All Issues' }).click();
+    await expect(page.getByRole('status')).toHaveText('Loading content…');
+    await expect(page.getByText('No issues here yet', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('0 issues', { exact: true })).toHaveCount(0);
+  } finally {
+    release();
+  }
+  await expect(page.getByRole('status')).toHaveCount(0);
+  await expect(page.getByText('No issues here yet', { exact: true })).toBeVisible();
+});
+
+test('a failed filter request clears the loading indicator and shows the error', async ({ page }) => {
+  await page.goto('/issues');
+  await expect(page.getByText('No issues here yet', { exact: true })).toBeVisible();
+  let release!: () => void;
+  const responseReady = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/tasks?**', async (route) => {
+    await responseReady;
+    await route.fulfill({ status: 500, json: { message: 'Unable to load issues.' } });
+  });
+  try {
+    await page.getByRole('combobox', { name: 'Status filter', exact: true }).selectOption('READY');
+    await expect(page.getByRole('status')).toHaveText('Loading issues…');
+    await expect(page.getByText('No issues here yet', { exact: true })).toHaveCount(0);
+  } finally {
+    release();
+  }
+  await expect(page.getByRole('status')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toContainText('Unable to load issues.');
+});
+
 test('issue columns fit their contents and priority indicators match their values', async ({ page }) => {
   const priorities = ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'];
   const approvals = ['PENDING', 'APPROVED', 'CHANGES_REQUESTED', 'REJECTED', 'PENDING'];
