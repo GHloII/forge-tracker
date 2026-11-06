@@ -170,7 +170,7 @@
           }}>Invite to project</button
         >
       </div>
-      <p>Roles control access to this project. Workspace owners always have full access.</p>
+      <p>Roles control access to this project. Owners always have full access.</p>
       <div class="project-member-list">
         {#each participants as person}
           <div class="project-member-row">
@@ -180,7 +180,7 @@
                 >@{person.username}{person.kind === 'AGENT' ? ' · Agent' : ''}</small
               >
             </div>
-            {#if person.kind === 'OWNER'}<span class="tag">Workspace owner</span>
+            {#if person.kind === 'OWNER'}<span class="tag">Owner</span>
             {:else}
               <select
                 aria-label={`Role for ${person.display_name}`}
@@ -326,7 +326,7 @@
       <h2>Project roles</h2>
       <p>
         Give roles names that fit your team. Each role uses one permission level. Task management
-        does not grant approval, invitation or workspace administration rights.
+        does not grant approval, invitation or administration rights.
       </p>
       <div class="project-member-list">
         {#each roles as role}<div class="project-member-row">

@@ -951,7 +951,7 @@ class TrackerIntegrationTest {
       boolean prerendered = !List.of("/projects/123/settings", "/future-page").contains(pagePath);
       if (prerendered) {
         assertThat(html.exists()).as("prerendered HTML for %s", path).isTrue();
-        assertThat(response.body()).contains("Opening your workspace…", "<title>");
+        assertThat(response.body()).contains("Opening Forge…", "<title>");
       } else {
         html = new org.springframework.core.io.ClassPathResource("static/200.html");
       }

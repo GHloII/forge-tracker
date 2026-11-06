@@ -283,12 +283,6 @@ time {
   font-size: 17px;
   letter-spacing: -0.4px;
 }
-.workspace-label {
-  font-size: 8px;
-  letter-spacing: 1.1px;
-  color: var(--subtle);
-  margin-left: auto;
-}
 .search-trigger {
   display: flex;
   align-items: center;
@@ -505,25 +499,9 @@ time {
   font-size: 12px;
   margin-top: 9px;
 }
-.view-switch {
-  display: flex;
-  padding: 3px;
-  background: var(--sidebar);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  gap: 2px;
-}
-.view-switch a {
-  border: 0;
-  color: var(--muted);
-  background: none;
-  font-size: 11px;
-  padding: 5px 10px;
-}
-.view-switch a.active {
-  background: var(--hover);
-  color: var(--text);
-}
+
+
+
 .filters {
   display: flex;
   align-items: center;
@@ -1883,15 +1861,6 @@ time {
   .search-field {
     max-width: none;
   }
-  .sidebar {
-    width: 200px;
-  }
-  .workspace-label {
-    display: none;
-  }
-  .detail-panel {
-    max-width: calc(100vw - 200px);
-  }
   .table-head > span:nth-child(5),
   .status-cell {
     width: 100px;
@@ -1909,42 +1878,7 @@ time {
 }
 @media (max-width: 800px) {
   .sidebar {
-    width: 56px;
-    padding: 20px 6px 0;
-  }
-  .workspace {
-    margin: 0 7px 23px;
-  }
-  .workspace strong,
-  .workspace-label,
-  .search-trigger,
-  .sidebar-heading,
-  .project-nav,
-  .profile > div,
-  .profile > .icon-button,
-  .sidebar-bottom kbd,
-  .counter,
-  .nav-dot {
     display: none;
-  }
-  .sidebar nav a,
-  .sidebar-bottom > button,
-  .sidebar-bottom > a {
-    font-size: 0;
-    gap: 0;
-    padding: 12px;
-    justify-content: center;
-  }
-  .nav-icon {
-    font-size: 17px;
-    width: 18px;
-  }
-  .profile {
-    padding: 15px 6px;
-    justify-content: center;
-  }
-  .sidebar-bottom {
-    padding-top: 15px;
   }
   .topbar {
     height: 51px;
@@ -2030,7 +1964,7 @@ time {
     margin: 15px 20px;
   }
   .detail-panel {
-    max-width: calc(100vw - 56px);
+    max-width: 100vw;
     width: 650px;
   }
   .panel-scroll {
@@ -2106,10 +2040,7 @@ time {
     width: 90vw;
     max-width: 500px;
   }
-  .view-switch a {
-    padding: 5px 7px;
-    font-size: 10px;
-  }
+
 }
 @media (max-width: 450px) {
   .detail-panel {
@@ -2131,9 +2062,7 @@ time {
     max-width: 220px;
     line-height: 1.5;
   }
-  .view-switch {
-    display: none;
-  }
+
   .link-form {
     flex-wrap: wrap;
   }
@@ -2298,16 +2227,39 @@ time {
 }
 
 /* Page navigation retains the sidebar's compact appearance. */
-.sidebar a, .view-switch a, .settings-tabs :is(a, button) {
+.sidebar a, .settings-tabs :is(a, button) {
   text-decoration: none;
   white-space: nowrap;
 }
-.sidebar a, .view-switch a {
+.sidebar a {
   border-radius: 5px;
   line-height: 1.25;
 }
-.sidebar a:hover, .view-switch a:hover, .settings-tabs a:hover {
+.sidebar a:hover, .settings-tabs a:hover {
   background: var(--hover);
   color: var(--text);
 }
 .project-settings-link { margin-left: auto; }
+
+/* Let the issue rows set the width shared by their filters and footer. */
+.issue-list-layout {
+  width: fit-content;
+  min-width: min(760px, calc(100% - 48px));
+  max-width: calc(100% - 48px);
+  margin: 0 24px;
+}
+.issue-list-layout .compact-issues { margin: 0; max-width: 100%; }
+.issue-list-layout > .filters,
+.issue-list-layout > .list-footer {
+  contain: inline-size;
+  margin-left: 0;
+  margin-right: 0;
+  max-width: none;
+}
+@media (max-width: 800px) {
+  .issue-list-layout {
+    min-width: calc(100% - 28px);
+    max-width: calc(100% - 28px);
+    margin: 0 14px;
+  }
+}

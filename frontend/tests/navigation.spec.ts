@@ -160,7 +160,7 @@ test('page shells contain rendered content before JavaScript starts', async ({ r
     expect(response.ok()).toBeTruthy();
     const html = await response.text();
     expect(html).toContain(`<title>${title} · Forge</title>`);
-    expect(html).toContain('Opening your workspace…');
+    expect(html).toContain('Opening Forge…');
     expect(html).toContain('href="/_app/');
   }
 });

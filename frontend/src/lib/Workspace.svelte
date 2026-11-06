@@ -820,6 +820,7 @@
 </script>
 
 {#snippet issues()}
+        <div class:issue-list-layout={view !== 'Board'}>
         <div class="filters">
           <div class="search-field">
             <span>⌕</span><input
@@ -932,7 +933,7 @@
                   >{/each}
               </section>{/each}
           </div>
-        {:else}
+        {:else if tasks.length}
           <div class="issue-table compact-issues">
             <div class="table-head">
               <span></span><span>Pri</span><span>Issue</span><span>Title</span>
@@ -1030,6 +1031,7 @@
           <span class="key-hint"><kbd>J</kbd><kbd>K</kbd> navigate <kbd>↵</kbd> open</span>
         </footer>
         {/if}
+        </div>
 {/snippet}
 
 {#snippet inbox()}
@@ -1045,6 +1047,7 @@
               })}>Mark all as read</button
           >
         </div>
+        {#if notifications.length}
         <div class="notifications compact-inbox">
           <div class="inbox-head" aria-hidden="true"><span></span><span>Issue</span><span>Title</span><span>Update</span><span>Date</span></div>
           {#each notifications as n}<button
@@ -1064,6 +1067,7 @@
               <time>{date(n.created_at)}</time></button
             >{/each}
         </div>
+        {/if}
         {#if !notifications.length}<div class="empty">
             <div class="empty-symbol">◫</div>
             <h2>You're all caught up</h2>
@@ -1124,7 +1128,7 @@
             <p>
               {owner
                 ? 'Create your first project, then add people and proposals.'
-                : 'Ask your workspace owner for project access.'}
+                : 'Ask the owner for project access.'}
             </p>
             {#if owner}<button class="primary" onclick={() => projectEditor()}
                 >Create project</button
@@ -1329,7 +1333,7 @@
 
 {#if loading}<div class="startup">
     <div class="brand-mark">f</div>
-    <LoadingIndicator label="Opening your workspace…" />
+    <LoadingIndicator label="Opening Forge…" />
   </div>
 {:else if !me}
   <main class="login">
@@ -1374,7 +1378,7 @@
       <p class="fine">
         {invitationToken
           ? 'Single-use invitation. Project access is granted when you join.'
-          : 'Ask your workspace owner for an invitation to create an account.'}
+          : 'Ask the owner for an invitation to create an account.'}
       </p>
       {#if invitationToken}<button
           type="button"
@@ -1417,7 +1421,7 @@
           invitationToken = '';
           replaceState(currentPage.url.pathname + currentPage.url.search, currentPage.state);
           error = '';
-        }}>Back to workspace</button
+        }}>Back to Forge</button
       >
     </div>
   </main>
@@ -1426,7 +1430,7 @@
     <aside class="sidebar">
       <div class="workspace">
         <div class="brand-mark">f</div>
-        <strong>Forge</strong><span class="workspace-label">WORKSPACE</span>
+        <strong>Forge</strong>
       </div>
       <button class="search-trigger" onclick={focusSearch}
         ><span>⌕</span> Search issues <kbd>/</kbd></button
@@ -1478,7 +1482,7 @@
     <main class="main">
       <header class="topbar">
         <div class="breadcrumb">
-          Workspace <span>/</span> <strong>{currentProject?.name ?? 'All projects'}</strong><span
+          <strong>{currentProject?.name ?? 'All projects'}</strong><span
             >/</span
           >{view}
         </div>
@@ -1508,7 +1512,7 @@
                 : view === 'Projects'
                   ? 'Keep the work connected to its context.'
                   : view === 'Settings'
-                    ? 'Your workspace, people and integrations.'
+                    ? 'Your account, people and integrations.'
                     : view === 'Project settings'
                       ? 'Manage this project, its members, invitations and roles.'
                       : view === 'My Issues'
@@ -1516,13 +1520,6 @@
                         : 'Everything your team is moving forward.'}
           </p>
         </div>
-        {#if ['All Issues', 'Board'].includes(view)}<div class="view-switch">
-            <a href={href('All Issues')} class:active={view === 'All Issues'}
-              >☷ List</a
-            ><a href={href('Board')} class:active={view === 'Board'}
-              >▥ Board</a
-            >
-          </div>{/if}
       </div>
       {#if pending.page || loadedPage !== currentPage.url.pathname + currentPage.url.search}
         <LoadingIndicator label="Loading content…" />
