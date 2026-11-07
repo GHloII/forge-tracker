@@ -126,12 +126,12 @@
     theme = $state('dark'),
     toast = $state('');
   const navigation = [
-    { name: 'Inbox', icon: '◫' },
-    { name: 'My Issues', icon: '◎' },
-    { name: 'Approvals', icon: '◇' },
-    { name: 'All Issues', icon: '☷' },
-    { name: 'Board', icon: '▥' },
-    { name: 'Projects', icon: '▣' },
+    { name: 'Inbox', icon: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4' },
+    { name: 'My Issues', icon: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M5 21a7 7 0 0 1 14 0' },
+    { name: 'Approvals', icon: 'M5 12l4 4L19 6' },
+    { name: 'All Issues', icon: 'M9 6h11 M9 12h11 M9 18h11 M4 6h.01 M4 12h.01 M4 18h.01' },
+    { name: 'Board', icon: 'M3 4h18v16H3z M9 4v16 M15 4v16' },
+    { name: 'Projects', icon: 'M3 6h7l2 2h9v11H3z' },
   ];
   const colors: Record<string, string> = {
     BACKLOG: '#85868f',
@@ -831,7 +831,7 @@
         <div class:issue-list-layout={view !== 'Board'}>
         <div class="filters">
           <div class="search-field">
-            <span>⌕</span><input
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m16 16 4 4" /></svg><input
               bind:this={searchInput}
               bind:value={query}
               oninput={search}
@@ -839,11 +839,6 @@
               aria-label="Search issues"
             /><kbd>/</kbd>
           </div>
-          <select aria-label="Project" bind:value={project} onchange={changeProject}
-            ><option value="">All projects</option>{#each projects as p}<option value={String(p.id)}
-                >{p.name}</option
-              >{/each}</select
-          >
           <select
             aria-label="Status filter"
             bind:value={statusFilter}
@@ -1436,23 +1431,15 @@
 {:else}
   <div class="app-shell">
     <aside class="sidebar">
+      <div class="sidebar-top">
+      <div class="sidebar-group">
       <div class="workspace">
         <div class="brand-mark">f</div>
         <strong>Forge</strong>
       </div>
-      <button class="search-trigger" onclick={focusSearch}
-        ><span>⌕</span> Search issues <kbd>/</kbd></button
-      >
-      <nav>
-        {#each navigation as item}<a
-            href={href(item.name)}
-            aria-current={view === item.name ? 'page' : undefined}
-            class:active={view === item.name}
-            ><span class="nav-icon">{item.icon}</span
-            >{item.name}{#if item.name === 'Inbox' && unread}<span class="counter">{unread}</span
-              >{/if}{#if item.name === 'Approvals'}<span class="nav-dot"></span>{/if}</a
-          >{/each}
-      </nav>
+      </div>
+      <div class="sidebar-group">
+      <div class="sidebar-projects">
       <div class="sidebar-heading">
         PROJECTS {#if owner}<button
             class="icon-button"
@@ -1474,11 +1461,26 @@
               aria-current={project === String(item.id) && view === 'Project settings' ? 'page' : undefined}
               aria-label={`Settings for ${item.name}`} title={`Settings for ${item.name}`}>⚙</a>{/if}
         </div>{/each}
+      </div>
+      </div>
+      <div class="sidebar-group">
+      <nav>
+        {#each navigation as item}<a
+            href={href(item.name)}
+            aria-current={view === item.name ? 'page' : undefined}
+            class:active={view === item.name}
+            ><span class="nav-icon"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d={item.icon} /></svg></span
+            >{item.name}{#if item.name === 'Inbox' && unread}<span class="counter">{unread}</span
+              >{/if}{#if item.name === 'Approvals'}<span class="nav-dot"></span>{/if}</a
+          >{/each}
+      </nav>
+      </div>
+      </div>
       <div class="sidebar-bottom">
         <a href={href('Settings')} aria-current={view === 'Settings' ? 'page' : undefined} class:active={view === 'Settings'}
-          ><span class="nav-icon">⚙</span>Settings</a
+          ><span class="nav-icon"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9l2.1 2.1 M17 17l2.1 2.1 M19.1 4.9 17 7 M7 17l-2.1 2.1" /></svg></span>Settings</a
         ><button onclick={() => (shortcuts = true)}
-          ><span class="nav-icon">?</span>Keyboard shortcuts<kbd>?</kbd></button
+          ><span class="nav-icon"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .7-1.5 1.2-1.5 2.5 M12 17h.01" /></svg></span>Keyboard shortcuts<kbd>?</kbd></button
         >
         <div class="profile">
           <span class="avatar">{me.username.slice(0, 2).toUpperCase()}</span>

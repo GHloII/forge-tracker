@@ -265,19 +265,35 @@ time {
   overflow: hidden;
 }
 .sidebar {
+  --sidebar-inner: 8px;
+  --sidebar-outer: 24px;
+  --sidebar-row-height: 35px;
   display: flex;
   flex-direction: column;
   width: 224px;
   flex-shrink: 0;
   background: var(--sidebar);
   border-right: 1px solid var(--border);
-  padding: 24px 12px 0;
+  padding: var(--sidebar-outer) var(--sidebar-inner) 0;
+}
+.sidebar-top,
+.sidebar-group,
+.sidebar-projects {
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-top {
+  gap: var(--sidebar-outer);
+}
+.sidebar-group {
+  gap: var(--sidebar-inner);
 }
 .workspace {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 8px 25px;
+  margin: 0;
+  padding-left: 11px;
 }
 .workspace strong {
   font-size: 17px;
@@ -290,13 +306,14 @@ time {
   color: var(--muted);
   font-size: 12px;
   background: transparent;
-  margin: 0 2px 22px;
+  margin: 0;
   border-color: var(--border);
-  padding: 7px 9px;
+  padding: 7px 10px;
 }
-.search-trigger > span {
-  font-size: 19px;
-  line-height: 12px;
+.search-trigger > svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 .search-trigger kbd {
   margin-left: auto;
@@ -304,7 +321,7 @@ time {
 .sidebar nav {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--sidebar-inner);
 }
 .sidebar nav a,
 .sidebar-bottom > button,
@@ -318,6 +335,9 @@ time {
   text-align: left;
   color: var(--muted);
   font-size: 12px;
+}
+.sidebar nav a {
+  min-height: var(--sidebar-row-height);
 }
 .sidebar nav a.active,
 .sidebar-bottom > a.active {
@@ -350,7 +370,8 @@ time {
   color: var(--subtle);
   font-size: 9px;
   letter-spacing: 1.1px;
-  margin: 29px 11px 9px;
+  margin: 0;
+  padding-left: 11px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -369,6 +390,7 @@ time {
   color: var(--muted);
   font-size: 12px;
   padding: 8px 11px;
+  min-height: var(--sidebar-row-height);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -427,7 +449,7 @@ time {
   align-items: center;
   gap: 9px;
   border-top: 1px solid var(--border);
-  padding: 16px 8px;
+  padding: 16px 11px;
   margin-top: 13px;
 }
 .profile > div {
@@ -521,10 +543,11 @@ time {
   min-width: 150px;
   max-width: 300px;
 }
-.search-field > span {
+.search-field > svg {
   color: var(--muted);
-  font-size: 19px;
-  line-height: 20px;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 .search-field input {
   border: 0;
