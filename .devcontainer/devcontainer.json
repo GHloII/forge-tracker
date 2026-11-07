@@ -17,5 +17,8 @@
     "DEV_POLLING": "true"
   },
   "postCreateCommand": "npm install -g @openai/codex && cd frontend && npm ci",
-  "remoteUser": "vscode"
+  "remoteUser": "vscode",
+  "mounts": [
+    "source=devcontainer-codex-data,target=/home/vscode/.codex,type=volume"
+  ]
 }

@@ -48,3 +48,11 @@ tasks.named('processResources') {
     dependsOn 'frontendBuild'
     from('frontend/dist') { into 'static' }
 }
+
+tasks.register('bootRunBackend', org.springframework.boot.gradle.tasks.run.BootRun) {
+    group = 'application'
+    description = 'Runs the backend only, alongside the Vite development server.'
+    mainClass = 'dev.forge.tracker.TrackerApplication'
+    classpath = files(sourceSets.main.output.classesDirs, sourceSets.main.resources.srcDirs, configurations.runtimeClasspath)
+    javaLauncher = javaToolchains.launcherFor(java.toolchain)
+}
