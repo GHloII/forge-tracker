@@ -352,11 +352,19 @@
     return pageUrl(next, selectedProject, section);
   }
   async function loadPageData() {
+    const legacyProject = currentPage.url.searchParams.get('project');
+    if (legacyProject) {
+      const params = new URLSearchParams(currentPage.url.search);
+      params.delete('project');
+      const search = params.toString();
+      await goto(href(view, currentPage.params.projectId ?? legacyProject) + (search ? `?${search}` : '') + currentPage.url.hash, { replaceState: true });
+      return;
+    }
     await withLoading('page', async () => {
       loadedPage = currentPage.url.pathname + currentPage.url.search;
       const sequence = ++routeSequence;
       clearTimeout(searchTimer);
-      project = currentPage.params.projectId ?? currentPage.url.searchParams.get('project') ?? '';
+      project = currentPage.params.projectId ?? '';
       settingsTab = !owner && ['People', 'Audit log'].includes(section) ? 'Account' : section;
       page = 0;
       showArchived = false;
