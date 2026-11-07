@@ -2,6 +2,70 @@ import { expect, test } from '@playwright/test';
 
 const project = { id: 42, key: 'TEST', name: 'Sample project', description: '', repository: '' };
 
+test('paste an image into an issue description', async ({ page }) => {
+  await page.goto('/issues#task=TEST-1');
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const editor = page.locator('textarea.description-input');
+  await editor.fill('Before after');
+  await editor.evaluate((element) => {
+    (element as HTMLTextAreaElement).setSelectionRange(7, 7);
+    const data = new DataTransfer();
+    data.items.add(new File(['image'], 'image.png', { type: 'image/png' }));
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expect(editor).toHaveValue(/Before !\[Pasted image\]\(blob:.*\)after/);
+  await page.getByRole('button', { name: 'Preview Markdown' }).click();
+  await expect(page.locator('.markdown img')).toHaveCount(1);
+  let saved = '';
+  let uploads = 0;
+  let saves = 0;
+  await page.route('**/api/attachments/pasted', (route) => route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') }));
+  await page.route('**/api/tasks/TEST-1/attachments', (route) => {
+    uploads++;
+    return route.fulfill({ json: { id: 'pasted' } });
+  });
+  await page.route('**/api/tasks/TEST-1', async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback();
+    if (++saves === 1) return route.fulfill({ status: 500, json: { message: 'Save failed' } });
+    saved = route.request().postDataJSON().task.description;
+    await route.fulfill({ json: {} });
+  });
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('alert').first()).toContainText('Save failed');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect.poll(() => saved).toBe('Before ![Pasted image](/api/attachments/pasted)after');
+  expect(uploads).toBe(1);
+});
+
+test('pasted images in a new issue are attached after creation', async ({ page }) => {
+  let created = 0;
+  let saved = '';
+  await page.route('**/api/tasks', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    created++;
+    expect(route.request().postDataJSON().task.description).not.toContain('blob:');
+    await route.fulfill({ json: { identifier: 'TEST-1' } });
+  });
+  await page.route('**/api/tasks/TEST-1/attachments', (route) => route.fulfill({ json: { id: 'new-image' } }));
+  await page.route('**/api/tasks/TEST-1', async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback();
+    saved = route.request().postDataJSON().task.description;
+    await route.fulfill({ json: {} });
+  });
+  await page.goto('/issues');
+  await page.getByRole('button', { name: '+ New issue' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create issue' });
+  await dialog.getByLabel('Issue title').fill('Screenshot issue');
+  await dialog.getByLabel('Description').evaluate((element) => {
+    const data = new DataTransfer();
+    data.items.add(new File(['image'], 'image.png', { type: 'image/png' }));
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await dialog.getByRole('button', { name: 'Create issue', exact: true }).click();
+  await expect.poll(() => saved).toBe('![Pasted image](/api/attachments/new-image)');
+  expect(created).toBe(1);
+});
+
 test.beforeEach(async ({ context }) => {
   await context.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());

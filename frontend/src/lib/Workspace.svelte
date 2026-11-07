@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick, untrack, type Snippet } from 'svelte';
+  import { onMount, onDestroy, tick, untrack, type Snippet } from 'svelte';
   import { setWorkspaceViews } from './workspace-views';
   import { afterNavigate, goto, replaceState } from '$app/navigation';
   import { page as currentPage } from '$app/state';
@@ -15,6 +15,7 @@
   });
   import LoadingIndicator from './LoadingIndicator.svelte';
   import Markdown from './Markdown.svelte';
+  import { DescriptionImages } from './description-images';
   import ProjectSettings from './ProjectSettings.svelte';
   import {
     api,
@@ -35,6 +36,20 @@
     loading = $state(true),
     error = $state(''),
     busy = $state(false);
+  const descriptionImages = new DescriptionImages();
+  onDestroy(() => descriptionImages.dispose());
+  function pasteDescription(event: ClipboardEvent, form: { description: string }) {
+    if (busy) return;
+    const editor = event.currentTarget as HTMLTextAreaElement;
+    try {
+      const markdown = descriptionImages.paste(event);
+      if (!markdown) return;
+      editor.setRangeText(markdown, editor.selectionStart, editor.selectionEnd, 'end');
+      form.description = editor.value;
+    } catch (failure) {
+      error = (failure as Error).message;
+    }
+  }
   let pending = $state({ page: 0, tasks: 0, notifications: 0, settings: 0, detail: 0, discussion: 0 });
   async function withLoading(key: keyof typeof pending, action: () => Promise<void>) {
     pending[key]++;
@@ -512,6 +527,7 @@
   async function saveTask(event: SubmitEvent) {
     event.preventDefault();
     await run(async () => {
+      draft.description = await descriptionImages.upload(draft.description, task!.identifier);
       await api(`/tasks/${task!.identifier}`, 'PUT', {
         version: task!.version,
         task: input(draft),
@@ -590,11 +606,22 @@
     await run(async () => {
       const created = await api<Task>('/tasks', 'POST', {
         project: Number(createProject),
-        task: input(newTask),
+        task: input({ ...newTask, description: descriptionImages.withoutPending(newTask.description) }),
       });
       createOpen = false;
       await loadTasks();
       await openTask(created.identifier);
+      if (descriptionImages.hasPending(newTask.description)) {
+        editTask();
+        draft.description = newTask.description;
+        draft.description = await descriptionImages.upload(draft.description, created.identifier);
+        await api(`/tasks/${created.identifier}`, 'PUT', {
+          version: task!.version,
+          task: input(draft),
+        });
+        editing = false;
+        await refreshTask();
+      }
     });
   }
   async function sendComment(event: SubmitEvent) {
@@ -1580,6 +1607,8 @@
               >Description<textarea
                 class="description-input"
                 bind:value={draft.description}
+                onpaste={(event) => pasteDescription(event, draft)}
+                readonly={busy}
                 maxlength="100000"></textarea></label
             ><button type="button" class="text-button" onclick={() => (preview = !preview)}
               >{preview ? 'Hide preview' : 'Preview Markdown'}</button
@@ -1892,6 +1921,8 @@
         ><label>Description<textarea
             class="description-input"
             bind:value={newTask.description}
+            onpaste={(event) => pasteDescription(event, newTask)}
+            readonly={busy}
             placeholder="Describe the problem, requirements and expected outcome…"
             maxlength="100000"></textarea></label>
         <div class="form-grid">

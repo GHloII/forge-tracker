@@ -3,6 +3,12 @@
   import DOMPurify from 'dompurify';
   let { content, openTask }: { content: string; openTask: (id: string) => void } = $props();
   const renderer = new Renderer();
+  renderer.html = ({ text }) => DOMPurify.sanitize(text, { FORBID_TAGS: ['img', 'style', 'form', 'input'] });
+  renderer.image = ({ href }) => {
+    // Only local attachments and in-memory paste previews may load images.
+    if (!/^\/api\/attachments\/[a-zA-Z0-9-]+$/.test(href) && !/^blob:https?:\/\/[a-zA-Z0-9.:[\]-]+\/[a-zA-Z0-9-]+$/.test(href)) return '';
+    return `<img src="${href}" alt="Pasted image" />`;
+  };
   renderer.text = (token) => {
     if ('tokens' in token && token.tokens)
       return marked.Parser.parseInline(token.tokens, { renderer });
@@ -14,7 +20,7 @@
   };
   let html = $derived(
     DOMPurify.sanitize(marked.parse(content, { async: false, renderer }) as string, {
-      FORBID_TAGS: ['img', 'style', 'form', 'input'],
+      FORBID_TAGS: ['style', 'form', 'input'],
     }),
   );
 </script>
@@ -32,3 +38,7 @@
 >
   {@html html}
 </div>
+
+<style>
+  .markdown :global(img) { max-width: 100%; height: auto; }
+</style>
