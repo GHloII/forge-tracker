@@ -22,5 +22,14 @@ export function pageUrl(view: string, project = '', section = 'Account'): string
   const path = view === 'Settings'
     ? sections[section as keyof typeof sections] ?? '/settings/account'
     : paths[view as keyof typeof paths] ?? '/issues';
-  return resolve(path) + (project ? `?project=${encodeURIComponent(project)}` : '');
+  if (project) {
+    const params = { projectId: project };
+    switch (view) {
+      case 'All Issues': return resolve('/projects/[projectId=integer]/issues', params);
+      case 'My Issues': return resolve('/projects/[projectId=integer]/my-issues', params);
+      case 'Approvals': return resolve('/projects/[projectId=integer]/approvals', params);
+      case 'Board': return resolve('/projects/[projectId=integer]/board', params);
+    }
+  }
+  return resolve(path);
 }
