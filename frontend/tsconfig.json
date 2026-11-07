@@ -16,5 +16,7 @@
       "DOM.Iterable"
     ]
   },
-  "extends": "./.svelte-kit/tsconfig.json"
+  "extends": "$app/tsconfig",
+  "include": ["src"],
+  "exclude": ["src/service-worker"]
 }

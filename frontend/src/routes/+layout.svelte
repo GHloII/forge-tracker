@@ -1,7 +1,7 @@
 <script lang="ts">
   import '../style.css';
   import { page } from '$app/state';
-  import Workspace from '$lib/Workspace.svelte';
+  import Workspace from '#lib/Workspace.svelte';
   import type { Snippet } from 'svelte';
 
   let { children }: { children: Snippet } = $props();
