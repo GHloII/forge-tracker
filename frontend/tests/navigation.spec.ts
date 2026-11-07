@@ -5,15 +5,22 @@ const project = { id: 42, key: 'TEST', name: 'Sample project', description: '', 
 test('paste an image into an issue description', async ({ page }) => {
   await page.goto('/issues#task=TEST-1');
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
-  const editor = page.locator('textarea.description-input');
+  const editor = page.getByRole('textbox', { name: 'Description', exact: true });
   await editor.fill('Before after');
   await editor.evaluate((element) => {
-    (element as HTMLTextAreaElement).setSelectionRange(7, 7);
+    const selection = window.getSelection()!;
+    selection.setPosition(element.firstChild, 7);
     const data = new DataTransfer();
-    data.items.add(new File(['image'], 'image.png', { type: 'image/png' }));
+    data.items.add(new File([Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='), (char) => char.charCodeAt(0))], 'image.png', { type: 'image/png' }));
     element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   });
-  await expect(editor).toHaveValue(/Before !\[Pasted image\]\(blob:.*\)after/);
+  await expect(editor.locator('img')).toBeVisible();
+  await expect.poll(() => editor.locator('img').evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBe(1);
+  await page.keyboard.press('Backspace');
+  await expect(editor.locator('img')).toHaveCount(0);
+  await page.keyboard.press('Control+z');
+  await expect(editor.locator('img')).toHaveCount(1);
+  await expect(editor).toHaveText('Before after');
   await page.getByRole('button', { name: 'Preview Markdown' }).click();
   await expect(page.locator('.markdown img')).toHaveCount(1);
   let saved = '';
@@ -40,6 +47,7 @@ test('paste an image into an issue description', async ({ page }) => {
 test('pasted images in a new issue are attached after creation', async ({ page }) => {
   let created = 0;
   let saved = '';
+  await page.route('**/api/attachments/new-image', (route) => route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') }));
   await page.route('**/api/tasks', async (route) => {
     if (route.request().method() !== 'POST') return route.fallback();
     created++;
@@ -56,13 +64,19 @@ test('pasted images in a new issue are attached after creation', async ({ page }
   await page.getByRole('button', { name: '+ New issue' }).click();
   const dialog = page.getByRole('dialog', { name: 'Create issue' });
   await dialog.getByLabel('Issue title').fill('Screenshot issue');
+  await dialog.getByRole('textbox', { name: 'Description' }).fill('First line');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Second line');
   await dialog.getByLabel('Description').evaluate((element) => {
+    (element as HTMLElement).focus();
     const data = new DataTransfer();
-    data.items.add(new File(['image'], 'image.png', { type: 'image/png' }));
+    data.items.add(new File([Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='), (char) => char.charCodeAt(0))], 'image.png', { type: 'image/png' }));
     element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   });
+  await expect(dialog.getByRole('textbox', { name: 'Description' }).locator('img')).toBeVisible();
   await dialog.getByRole('button', { name: 'Create issue', exact: true }).click();
-  await expect.poll(() => saved).toBe('![Pasted image](/api/attachments/new-image)');
+  await expect.poll(() => saved).toBe('First line\n\nSecond line![Pasted image](/api/attachments/new-image)');
   expect(created).toBe(1);
 });
 

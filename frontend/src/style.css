@@ -117,7 +117,8 @@ input::placeholder,
 textarea::placeholder {
   color: var(--subtle);
 }
-label {
+label,
+.description-label {
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -1704,7 +1705,8 @@ time {
   border-top: 1px solid var(--border);
   padding-top: 20px;
 }
-.modal label {
+.modal label,
+.modal .description-label {
   font-size: 11px;
 }
 .modal .title-input {

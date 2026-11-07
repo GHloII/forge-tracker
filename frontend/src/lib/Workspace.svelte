@@ -15,6 +15,7 @@
   });
   import LoadingIndicator from './LoadingIndicator.svelte';
   import Markdown from './Markdown.svelte';
+  import DescriptionEditor from './DescriptionEditor.svelte';
   import { DescriptionImages } from './description-images';
   import ProjectSettings from './ProjectSettings.svelte';
   import {
@@ -38,16 +39,13 @@
     busy = $state(false);
   const descriptionImages = new DescriptionImages();
   onDestroy(() => descriptionImages.dispose());
-  function pasteDescription(event: ClipboardEvent, form: { description: string }) {
-    if (busy) return;
-    const editor = event.currentTarget as HTMLTextAreaElement;
+  function pasteDescription(event: ClipboardEvent): string {
+    if (busy) return '';
     try {
-      const markdown = descriptionImages.paste(event);
-      if (!markdown) return;
-      editor.setRangeText(markdown, editor.selectionStart, editor.selectionEnd, 'end');
-      form.description = editor.value;
+      return descriptionImages.paste(event);
     } catch (failure) {
       error = (failure as Error).message;
+      return '';
     }
   }
   let pending = $state({ page: 0, tasks: 0, notifications: 0, settings: 0, detail: 0, discussion: 0 });
@@ -773,7 +771,7 @@
     const focusable = () =>
       Array.from(
         node.querySelectorAll<HTMLElement>(
-          'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href]',
+          'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[contenteditable="true"],a[href]',
         ),
       );
     queueMicrotask(() => focusable()[0]?.focus());
@@ -1603,13 +1601,12 @@
                 maxlength="240"
                 required
               /></label
-            ><label
-              >Description<textarea
-                class="description-input"
+            ><div class="description-label"
+              >Description<DescriptionEditor
                 bind:value={draft.description}
-                onpaste={(event) => pasteDescription(event, draft)}
+                pasteImage={pasteDescription}
                 readonly={busy}
-                maxlength="100000"></textarea></label
+                /></div
             ><button type="button" class="text-button" onclick={() => (preview = !preview)}
               >{preview ? 'Hide preview' : 'Preview Markdown'}</button
             >{#if preview}<Markdown content={draft.description} {openTask} />{/if}
@@ -1918,13 +1915,12 @@
             required
             maxlength="240"
           /></label
-        ><label>Description<textarea
-            class="description-input"
+        ><div class="description-label">Description<DescriptionEditor
             bind:value={newTask.description}
-            onpaste={(event) => pasteDescription(event, newTask)}
+            pasteImage={pasteDescription}
             readonly={busy}
             placeholder="Describe the problem, requirements and expected outcome…"
-            maxlength="100000"></textarea></label>
+            /></div>
         <div class="form-grid">
           <label
             >Type<select bind:value={newTask.type}
