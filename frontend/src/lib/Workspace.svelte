@@ -13,6 +13,7 @@
     get projectSettings() { return projectSettings; },
     get settings() { return settings; },
   });
+  import Icon from './Icon.svelte';
   import LoadingIndicator from './LoadingIndicator.svelte';
   import Markdown from './Markdown.svelte';
   import DescriptionEditor from './DescriptionEditor.svelte';
@@ -951,7 +952,7 @@
                     </div>
                     <strong>{item.title}</strong>
                     <div class="card-footer">
-                      {#if item.approval === 'REJECTED'}<span class="rejected-tag">● Rejected</span>{:else if item.approval === 'PENDING'}<span class="approval-tag">◇ Pending</span
+                      {#if item.approval === 'REJECTED'}<span class="rejected-tag"><Icon name="dot" /> Rejected</span>{:else if item.approval === 'PENDING'}<span class="approval-tag"><Icon name="diamond" /> Pending</span
                         >{:else}<span class="muted">{label(item.type)}</span>{/if}<span
                         class="avatar tiny"
                         title={name(item.assigneeId)}
@@ -977,7 +978,7 @@
                   <span class="issue-title" title={item.title}><strong>{item.title}</strong>
                     {#each labels(item.labels).slice(0, 1) as tag}<span class="tag">{tag}</span>{/each}
                   </span>
-                  <span class="approval-cell"><span class="approval-tag" data-approval={item.approval}>{#if item.approval === 'PENDING'}<span aria-hidden="true">◇</span>{' '}{:else if item.approval === 'REJECTED'}<span aria-hidden="true">●</span>{' '}{/if}{label(item.approval)}</span></span>
+                  <span class="approval-cell"><span class="approval-tag" data-approval={item.approval}>{#if item.approval === 'PENDING'}<span aria-hidden="true"><Icon name="diamond" /></span>{' '}{:else if item.approval === 'REJECTED'}<span aria-hidden="true"><Icon name="dot" /></span>{' '}{/if}{label(item.approval)}</span></span>
                   <span class="status-cell"><span class="status-dot" style:background={colors[item.status]}></span><span>{label(item.status)}</span></span>
                   <span class="person-cell creator-cell" title={`Author: ${name(item.creatorId)}`}><span class="avatar tiny">{name(item.creatorId).slice(0, 2)}</span><span>{name(item.creatorId)}</span></span>
                   <span class="row-date">{date(view === 'Approvals' ? item.createdAt : item.updatedAt)}</span>
@@ -994,7 +995,7 @@
                 </div>
                 <div class="row-actions">
                   {#if owner && item.approval === 'APPROVED' && item.status !== 'DONE' && !item.archived}
-                    <button class="quick-done" disabled={busy} aria-label={`Mark ${item.identifier} done`} onclick={() => moveTask(item, 'DONE')}>✓ Done</button>
+                    <button class="quick-done" disabled={busy} aria-label={`Mark ${item.identifier} done`} onclick={() => moveTask(item, 'DONE')}><Icon name="check" /> Done</button>
                   {/if}
                   {#if managesProject(item.projectId)}
                     <button disabled={busy} title={item.archived ? 'Restore issue' : 'Archive issue'} aria-label={`${item.archived ? 'Restore' : 'Archive'} ${item.identifier}`} onclick={() => archiveRow(item)}>
@@ -1003,11 +1004,11 @@
                   {/if}
 
                   {#if item.approval === 'PENDING' && owner && !item.archived}
-                    <button class="quick-approve" disabled={busy} title={`Approve ${item.identifier}`} aria-label={`Approve ${item.identifier}`} onclick={() => { rowFeedback = ''; void reviewRow(item, 'APPROVED'); }}>✓ <span>Approve</span></button>
-                    <button disabled={busy} title={`Request changes to ${item.identifier}`} aria-label={`Request changes to ${item.identifier}`} onclick={() => startRowReview(item, 'CHANGES_REQUESTED')}>↺</button>
-                    <button class="danger-text" disabled={busy} title={`Reject ${item.identifier}`} aria-label={`Reject ${item.identifier}`} onclick={() => startRowReview(item, 'REJECTED')}>×</button>
+                    <button class="quick-approve" disabled={busy} title={`Approve ${item.identifier}`} aria-label={`Approve ${item.identifier}`} onclick={() => { rowFeedback = ''; void reviewRow(item, 'APPROVED'); }}><Icon name="check" /> <span>Approve</span></button>
+                    <button disabled={busy} title={`Request changes to ${item.identifier}`} aria-label={`Request changes to ${item.identifier}`} onclick={() => startRowReview(item, 'CHANGES_REQUESTED')}><Icon name="refresh" /></button>
+                    <button class="danger-text" disabled={busy} title={`Reject ${item.identifier}`} aria-label={`Reject ${item.identifier}`} onclick={() => startRowReview(item, 'REJECTED')}><Icon name="close" /></button>
                   {/if}
-                  <button class:following={item.subscribed} disabled={busy} aria-pressed={item.subscribed} title={item.subscribed ? 'Stop notifications for this issue' : 'Get progress and completion notifications'} aria-label={`${item.subscribed ? 'Stop notifications for' : 'Notify me about'} ${item.identifier}`} onclick={() => followRow(item)}>{item.subscribed ? '◉' : '◎'}</button>
+                  <button class:following={item.subscribed} disabled={busy} aria-pressed={item.subscribed} title={item.subscribed ? 'Stop notifications for this issue' : 'Get progress and completion notifications'} aria-label={`${item.subscribed ? 'Stop notifications for' : 'Notify me about'} ${item.identifier}`} onclick={() => followRow(item)}><Icon name={item.subscribed ? "bellOn" : "bell"} /></button>
                 </div>
               </div>
               {#if rowReview?.identifier === item.identifier}
@@ -1022,7 +1023,7 @@
           </div>
         {/if}
         {#if !tasks.length}<div class="empty">
-            <div class="empty-symbol">{view === 'Approvals' ? '◇' : '☷'}</div>
+            <div class="empty-symbol"><Icon name={view === "Approvals" ? "diamond" : "list"} /></div>
             <h2>{view === 'Approvals' ? 'No proposals waiting' : 'No issues here yet'}</h2>
             <p>
               {query || statusFilter || priorityFilter
@@ -1032,7 +1033,7 @@
                   : 'Create an issue to give your team a clear next step.'}
             </p>
             {#if view !== 'Approvals' && projects.length}<button onclick={openCreate}
-                >+ Create issue</button
+                ><Icon name="plus" /> Create issue</button
               >{/if}
           </div>{/if}
         <footer class="list-footer">
@@ -1047,13 +1048,13 @@
               onclick={() => {
                 page--;
                 void run(loadTasks);
-              }}>← Previous</button
+              }}><Icon name="left" /> Previous</button
             ><button
               disabled={(page + 1) * 50 >= total || busy}
               onclick={() => {
                 page++;
                 void run(loadTasks);
-              }}>Next →</button
+              }}>Next <Icon name="right" /></button
             >
           </div>
           <span class="key-hint"><kbd>J</kbd><kbd>K</kbd> navigate <kbd>↵</kbd> open</span>
@@ -1097,7 +1098,7 @@
         </div>
         {/if}
         {#if !notifications.length}<div class="empty">
-            <div class="empty-symbol">◫</div>
+            <div class="empty-symbol"><Icon name="inbox" /></div>
             <h2>You're all caught up</h2>
             <p>Turn on issue notifications to receive updates here.</p>
           </div>{/if}
@@ -1107,13 +1108,13 @@
             onclick={() => {
               notificationPage--;
               void run(loadNotifications);
-            }}>← Previous</button
+            }}><Icon name="left" /> Previous</button
           ><span>{notificationTotal} notifications</span><button
             disabled={(notificationPage + 1) * 40 >= notificationTotal}
             onclick={() => {
               notificationPage++;
               void run(loadNotifications);
-            }}>Next →</button
+            }}>Next <Icon name="right" /></button
           >
         </div>
         </div>
@@ -1130,7 +1131,7 @@
                   importOpen = true;
                 }}
                 disabled={!projects.length}>Import TODO.md</button
-              ><button class="primary" onclick={() => projectEditor()}>+ New project</button>
+              ><button class="primary" onclick={() => projectEditor()}><Icon name="plus" /> New project</button>
             </div>{/if}
         </div>
         <div class="project-list">
@@ -1143,7 +1144,7 @@
                 </h2>
                 <p>{p.description || 'No project description yet.'}</p>
                 {#if p.repository}<a href={p.repository} target="_blank" rel="noreferrer"
-                    >{p.repository.replace('https://github.com/', '')} ↗</a
+                    >{p.repository.replace('https://github.com/', '')} <Icon name="external" /></a
                   >{/if}
               </div>
               {#if owner}<a class="project-settings-link" href={href('Project settings', String(p.id))}>Project settings</a
@@ -1151,7 +1152,7 @@
             </article>{/each}
         </div>
         {#if !projects.length}<div class="empty">
-            <div class="empty-symbol">▣</div>
+            <div class="empty-symbol"><Icon name="grid" /></div>
             <h2>A home for your team's work</h2>
             <p>
               {owner
@@ -1195,12 +1196,12 @@
             <div class="mcp-project-tags" aria-label="Allowed projects">
               {#each ids as id}
                 <span class="mcp-project-tag">{projects.find(p => p.id === id)?.name ?? 'Project ' + id}
-                  <button class="tag-remove" aria-label={'Remove project ' + (projects.find(p => p.id === id)?.name ?? id)} disabled={busy || locked} onclick={() => change(ids.filter(value => value !== id))}>×</button>
+                  <button class="tag-remove" aria-label={'Remove project ' + (projects.find(p => p.id === id)?.name ?? id)} disabled={busy || locked} onclick={() => change(ids.filter(value => value !== id))}><Icon name="close" /></button>
                 </span>
               {/each}
               {#if !locked && projects.some(p => !ids.includes(p.id))}
-                <details class="project-add"><summary aria-label="Add project">+</summary>
-                  <div class="project-add-menu">{#each projects.filter(p => !ids.includes(p.id)) as p}<button disabled={busy} onclick={() => change([...ids, p.id])}>+ {p.name}</button>{/each}</div>
+                <details class="project-add"><summary aria-label="Add project"><Icon name="plus" /></summary>
+                  <div class="project-add-menu">{#each projects.filter(p => !ids.includes(p.id)) as p}<button disabled={busy} onclick={() => change([...ids, p.id])}><Icon name="plus" /> {p.name}</button>{/each}</div>
                 </details>
               {/if}
               {#if !ids.length}<span class="muted">No project access</span>{/if}
@@ -1217,9 +1218,9 @@
               <p class="muted">Choose how Forge looks on this device.</p>
               <div class="theme-options">
                 <button class:active={theme === 'dark'} onclick={() => setTheme('dark')}
-                  >◐ Dark</button
+                  ><Icon name="moon" /> Dark</button
                 ><button class:active={theme === 'light'} onclick={() => setTheme('light')}
-                  >☀ Light</button
+                  ><Icon name="sun" /> Light</button
                 >
               </div>
             </section>
@@ -1401,7 +1402,7 @@
           ? inviteSignIn
             ? 'Sign in & accept invitation'
             : 'Create account & join'
-          : 'Sign in'} <span>→</span></button
+          : 'Sign in'} <Icon name="right" /></button
       >
       <p class="fine">
         {invitationToken
@@ -1469,12 +1470,12 @@
         PROJECTS {#if owner}<button
             class="icon-button"
             aria-label="Create project"
-            onclick={() => projectEditor()}>+</button
+            onclick={() => projectEditor()}><Icon name="plus" /></button
           >{/if}
       </div>
       <a href={projectHref('')} class="project-nav" class:chosen={!project}
         aria-current={!project && ['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view) ? 'page' : undefined}
-        ><span class="project-glyph">▦</span>All projects</a>
+        ><span class="project-glyph"><Icon name="grid" /></span>All projects</a>
       {#each projects as item}<div class="project-nav-row" class:chosen={project === String(item.id)}>
           <a href={projectHref(String(item.id))} class="project-nav"
             class:chosen={project === String(item.id)}
@@ -1484,7 +1485,7 @@
               class="project-settings-button icon-button"
               class:active={project === String(item.id) && view === 'Project settings'}
               aria-current={project === String(item.id) && view === 'Project settings' ? 'page' : undefined}
-              aria-label={`Settings for ${item.name}`} title={`Settings for ${item.name}`}>⚙</a>{/if}
+              aria-label={`Settings for ${item.name}`} title={`Settings for ${item.name}`}><Icon name="settings" /></a>{/if}
         </div>{/each}
       </div>
       </div>
@@ -1510,7 +1511,7 @@
         <div class="profile">
           <span class="avatar">{me.username.slice(0, 2).toUpperCase()}</span>
           <div><strong>{me.username}</strong><small>{label(me.kind)}</small></div>
-          <button class="icon-button" aria-label="Sign out" onclick={logout}>↪</button>
+          <button class="icon-button" aria-label="Sign out" onclick={logout}><Icon name="logout" /></button>
         </div>
       </div>
     </aside>
@@ -1522,14 +1523,14 @@
           >{view}
         </div>
         <button class="primary small" onclick={openCreate} disabled={!projects.length}
-          >+ New issue <kbd>C</kbd></button
+          ><Icon name="plus" /> New issue <kbd>C</kbd></button
         >
       </header>
       {#if error}<div role="alert" class="error global-error">
           <span>{error}</span><button
             class="icon-button"
             aria-label="Dismiss error"
-            onclick={() => (error = '')}>×</button
+            onclick={() => (error = '')}><Icon name="close" /></button
           >
         </div>{/if}
       <div class="view-heading">
@@ -1576,14 +1577,14 @@
           ><span class="muted">{projects.find((p) => p.id === task!.projectId)?.name}</span><span
             class="slash">/</span
           >{task.identifier}</span
-        ><button class="icon-button" aria-label="Close issue" onclick={closeTask}>×</button>
+        ><button class="icon-button" aria-label="Close issue" onclick={closeTask}><Icon name="close" /></button>
       </header>
       <div class="panel-scroll">
         <div class="detail-actions">
           <span class="tag">{label(task.type)}</span><button
             disabled={busy}
             onclick={() => taskAction('subscription', { subscribed: !detail!.subscribed })}
-            >{detail!.subscribed ? '◉ Notifications on' : '◎ Notify me'}</button
+            ><Icon name={detail!.subscribed ? "bellOn" : "bell"} /> {detail!.subscribed ? "Notifications on" : "Notify me"}</button
           >{#if canManage}<button
               disabled={busy}
               onclick={() => taskAction('archive', { archived: !task!.archived })}
@@ -1661,7 +1662,7 @@
                 disabled={busy}
                 onclick={() => taskAction('assign', { assignee: me!.id })}>Assign to me</button
               >{/if}<span>Approval</span><strong class="approval-state" data-state={task.approval}
-              >◇ {label(task.approval)} <small>rev {task.revision}</small></strong
+              ><Icon name="diamond" /> {label(task.approval)} <small>rev {task.revision}</small></strong
             ><span>Category</span><span>{task.category || '—'}</span><span>Labels</span>
             <div>
               {#each labels(task.labels) as tag}<span class="tag">{tag}</span>{:else}—{/each}
@@ -1712,7 +1713,7 @@
                 class="approve"
                 disabled={busy}
                 onclick={() => taskAction('approval', { decision: 'APPROVED', comment: feedback })}
-                >✓ Approve</button
+                ><Icon name="check" /> Approve</button
               ><button
                 disabled={busy}
                 onclick={() =>
@@ -1751,7 +1752,7 @@
           <div class="section-heading">
             <h2>Attachments <span>{detail!.attachments.length}</span></h2>
             {#if canWrite && !task.archived}<label class="upload-button"
-                >+ Add image<input
+                ><Icon name="plus" /> Add image<input
                   type="file"
                   accept="image/png,image/jpeg,image/gif"
                   onchange={upload}
@@ -1775,9 +1776,9 @@
           {#each detail!.links as link}<div class="linked-resource">
               <span class="tag">{link.kind}</span>{#if link.kind === 'RELATED'}<button
                   class="text-button"
-                  onclick={() => openTask(link.url)}>{link.url} →</button
+                  onclick={() => openTask(link.url)}>{link.url} <Icon name="right" /></button
                 >{:else}<a href={link.url} target="_blank" rel="noreferrer"
-                  >{link.url.replace('https://github.com/', '')} ↗</a
+                  >{link.url.replace('https://github.com/', '')} <Icon name="external" /></a
                 >{/if}
             </div>{/each}{#if canEdit && !task.archived}<form class="link-form" onsubmit={addLink}>
               <select aria-label="Link type" bind:value={linkKind}
@@ -1899,7 +1900,7 @@
       <header>
         <h2>New issue</h2>
         <button class="icon-button" aria-label="Close" onclick={() => (createOpen = false)}
-          >×</button
+          ><Icon name="close" /></button
         >
       </header>
       <form onsubmit={create}>
@@ -1956,7 +1957,7 @@
       <header>
         <h2>{projectEditId ? 'Edit project' : 'New project'}</h2>
         <button class="icon-button" aria-label="Close" onclick={() => (projectFormOpen = false)}
-          >×</button
+          ><Icon name="close" /></button
         >
       </header>
       <form onsubmit={saveProject}>
@@ -2006,7 +2007,7 @@
       <header>
         <h2>Import Markdown tasks</h2>
         <button class="icon-button" aria-label="Close" onclick={() => (importOpen = false)}
-          >×</button
+          ><Icon name="close" /></button
         >
       </header>
       <form onsubmit={previewImport}>
@@ -2077,7 +2078,7 @@
     >
       <header>
         <h2>Keyboard shortcuts</h2>
-        <button class="icon-button" aria-label="Close" onclick={() => (shortcuts = false)}>×</button
+        <button class="icon-button" aria-label="Close" onclick={() => (shortcuts = false)}><Icon name="close" /></button
         >
       </header>
       {#each [['/', 'Search issues'], ['C', 'Create issue'], ['J / ↓', 'Next issue'], ['K / ↑', 'Previous issue'], ['Enter', 'Open selected issue'], ['Esc', 'Close panel or dialog'], ['?', 'Show shortcuts']] as shortcut}<div
@@ -2090,6 +2091,6 @@
     class="floating-error"
     role="alert"
   >
-    {error}<button class="icon-button" aria-label="Dismiss" onclick={() => (error = '')}>×</button>
+    {error}<button class="icon-button" aria-label="Dismiss" onclick={() => (error = '')}><Icon name="close" /></button>
   </div>{/if}
-{#if toast}<div class="toast" role="status">✓ {toast}</div>{/if}
+{#if toast}<div class="toast" role="status"><Icon name="check" /> {toast}</div>{/if}
