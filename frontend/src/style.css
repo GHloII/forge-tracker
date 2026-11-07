@@ -1825,259 +1825,8 @@ time {
   color: var(--muted);
   font-size: 12px;
 }
-@media (min-width: 1600px) {
-  .view-heading,
-  .filters {
-    margin-left: 40px;
-    margin-right: 40px;
-  }
-  .issue-table {
-    margin: 0 32px;
-  }
-  .detail-panel {
-    width: 720px;
-  }
-}
-@media (max-width: 1150px) {
-  .issue-title .tag {
-    display: none;
-  }
-  .issue-title .approval-tag {
-    font-size: 0;
-    padding: 0;
-    border: 0;
-    background: none;
-  }
-  .issue-title .approval-tag::after {
-    content: '◇';
-    font-size: 14px;
-  }
-  .key-hint {
-    display: none;
-  }
-  .filters {
-    gap: 6px;
-  }
-  .search-field {
-    max-width: none;
-  }
-  .table-head > span:nth-child(5),
-  .status-cell {
-    width: 100px;
-  }
-  .table-head > span:nth-child(6),
-  .assignee-cell {
-    width: 55px;
-  }
-  .topbar {
-    padding: 0 24px;
-  }
-  .breadcrumb {
-    gap: 7px;
-  }
-}
 @media (max-width: 800px) {
   .sidebar {
-    display: none;
-  }
-  .topbar {
-    height: 51px;
-    padding: 0 18px;
-  }
-  .breadcrumb {
-    font-size: 10px;
-  }
-  .breadcrumb > strong,
-  .breadcrumb > span:first-child {
-    display: none;
-  }
-  .topbar .primary {
-    font-size: 10px;
-  }
-  .topbar kbd {
-    display: none;
-  }
-  .view-heading {
-    margin: 25px 20px 20px;
-  }
-  .view-heading h1 {
-    font-size: 20px;
-  }
-  .view-heading p {
-    font-size: 11px;
-  }
-  .filters {
-    margin: 0 20px 15px;
-  }
-  .filters select {
-    max-width: 110px;
-    font-size: 10px;
-  }
-  .search-field {
-    flex-basis: 100%;
-    max-width: none;
-  }
-  .issue-table {
-    margin: 0 12px;
-  }
-  .table-head > span:nth-child(2),
-  .priority {
-    width: 30px;
-    padding-left: 5px;
-  }
-  .table-head > span:nth-child(2) {
-    font-size: 0;
-  }
-  .table-head > span:nth-child(2)::after {
-    content: 'Pri';
-    font-size: 9px;
-  }
-  .table-head > span:nth-child(3),
-  .issue-id {
-    width: 67px;
-    font-size: 10px;
-  }
-  .table-head > span:nth-child(6),
-  .assignee-cell {
-    display: none;
-  }
-  .table-head > span:nth-child(7),
-  .row-date {
-    display: none;
-  }
-  .table-head > span:nth-child(5),
-  .status-cell {
-    width: 80px;
-    font-size: 9px;
-  }
-  .status-cell {
-    gap: 4px;
-  }
-  .issue-title > strong {
-    font-size: 11px;
-  }
-  .issue-title {
-    gap: 4px;
-    padding-right: 6px;
-  }
-  .list-footer {
-    margin: 15px 20px;
-  }
-  .detail-panel {
-    max-width: 100vw;
-    width: 650px;
-  }
-  .panel-scroll {
-    padding: 20px;
-  }
-  .panel-header {
-    padding: 0 20px;
-  }
-  .detail-title {
-    font-size: 21px;
-  }
-  .settings-tabs {
-    margin: 0 20px;
-    gap: 15px;
-    overflow: auto;
-    flex-shrink: 0;
-  }
-  .settings-tabs :is(a, button) {
-    font-size: 10px;
-  }
-  .settings-content {
-    padding: 25px 20px;
-  }
-  .member-list > div {
-    flex-wrap: wrap;
-    gap: 9px;
-  }
-  .section-toolbar,
-  .project-list {
-    margin-left: 20px;
-    margin-right: 20px;
-  }
-  .project-list article {
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-  .project-list p {
-    font-size: 11px;
-  }
-  .notification {
-    padding: 15px 4px;
-  }
-  .notifications {
-    margin: 0 20px;
-  }
-  .notification strong {
-    font-size: 10px;
-  }
-  .notification p {
-    font-size: 10px;
-  }
-  .notification time {
-    font-size: 9px;
-  }
-  .section-toolbar {
-    flex-wrap: wrap;
-  }
-  .breadcrumb {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .board {
-    padding-left: 20px;
-  }
-  .modal-backdrop {
-    padding: 5vh 14px;
-  }
-  .modal {
-    padding: 20px;
-  }
-  .floating-error {
-    width: 90vw;
-    max-width: 500px;
-  }
-
-}
-@media (max-width: 450px) {
-  .detail-panel {
-    max-width: 100vw;
-  }
-  .issue-title .approval-tag {
-    display: none;
-  }
-  .table-head > span:nth-child(5),
-  .status-cell {
-    width: 14px;
-    font-size: 0;
-  }
-  .status-cell .status-dot {
-    width: 7px;
-    height: 7px;
-  }
-  .view-heading p {
-    max-width: 220px;
-    line-height: 1.5;
-  }
-
-  .link-form {
-    flex-wrap: wrap;
-  }
-  .properties {
-    grid-template-columns: 70px 1fr;
-    gap: 13px;
-  }
-  .panel-footer span {
-    max-width: 220px;
-    text-align: right;
-  }
-  .form-grid {
-    gap: 12px;
-  }
-  .project-icon {
     display: none;
   }
 }
@@ -2143,15 +1892,6 @@ time {
 .search-field { max-width: 240px; }
 .list-footer { max-width: 1264px; justify-content: flex-start; }
 .list-footer .key-hint { margin-left: auto; }
-@media (max-width: 1150px) {
-  .row-actions .quick-approve span { display: none; }
-}
-@media (max-width: 800px) {
-  .compact-issues .status-cell { font-size: 10px; }
-  .compact-issues .issue-title > strong { font-size: 12px; }
-  .row-review { padding-left: 12px; min-width: 0; }
-  .row-review label { width: 100%; }
-}
 .compact-issues .row-actions,
 .compact-issues .table-head > span:last-child { grid-column: 10; }
 
@@ -2191,7 +1931,6 @@ time {
 .add-person summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .participant-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 600px; gap: 12px; }
 .participant-form button { justify-self: start; }
-@media (max-width: 600px) { .participant-form { grid-template-columns: 1fr; } .mcp-project select { width: 130px; } }
 
 .mcp-project-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .mcp-project-tag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; }
@@ -2220,11 +1959,6 @@ time {
 .compact-inbox .inbox-title { font-size: 12px; font-weight: 450; }
 .compact-inbox .unread .inbox-title { font-weight: 550; }
 .inbox-list .inbox-pagination { justify-content: flex-start; margin: 16px 0; }
-@media (max-width: 750px) {
-  .inbox-list { margin: 0 14px; }
-  .compact-inbox { --inbox-columns: 18px 68px minmax(0, 1fr) 64px; }
-  .compact-inbox .inbox-event, .inbox-head > span:nth-child(4) { display: none; }
-}
 
 /* Page navigation retains the sidebar's compact appearance. */
 .sidebar a, .settings-tabs :is(a, button) {
@@ -2255,11 +1989,4 @@ time {
   margin-left: 0;
   margin-right: 0;
   max-width: none;
-}
-@media (max-width: 800px) {
-  .issue-list-layout {
-    min-width: calc(100% - 28px);
-    max-width: calc(100% - 28px);
-    margin: 0 14px;
-  }
 }
