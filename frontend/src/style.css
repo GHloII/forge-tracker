@@ -324,21 +324,19 @@ time {
   flex-direction: column;
   gap: var(--sidebar-inner);
 }
-.sidebar nav a,
+.sidebar-item,
 .sidebar-bottom > button,
 .sidebar-bottom > a {
   display: flex;
   align-items: center;
   gap: 9px;
   padding: 9px 11px;
+  min-height: var(--sidebar-row-height);
   background: none;
   border: 0;
   text-align: left;
   color: var(--muted);
   font-size: 1rem;
-}
-.sidebar nav a {
-  min-height: var(--sidebar-row-height);
 }
 .sidebar nav a.active,
 .sidebar-bottom > a.active {
@@ -346,11 +344,16 @@ time {
   color: var(--text);
 }
 .nav-icon {
-  width: 17px;
-  text-align: center;
-  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 17px;
+  height: 17px;
   color: var(--muted);
-  line-height: 15px;
+  line-height: 1;
+}
+.nav-icon > svg {
+  display: block;
 }
 .counter {
   font-size: 1rem;
@@ -374,7 +377,8 @@ time {
   font-variant: small-caps;
   letter-spacing: 1.1px;
   margin: 0;
-  padding-left: 11px;
+  /* padding-left: 11px; */
+  padding: 11px 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -383,16 +387,6 @@ time {
   font-size: 1rem;
 }
 .project-nav {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  border: 0;
-  background: none;
-  text-align: left;
-  color: var(--muted);
-  font-size: 1rem;
-  padding: 8px 11px;
-  min-height: var(--sidebar-row-height);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -405,8 +399,18 @@ time {
   align-items: center;
   border-radius: 6px;
 }
-.project-nav-row.chosen {
+.project-nav-row.chosen,
+.project-nav-row:hover {
   background: var(--hover);
+}
+.project-nav-row:hover a {
+  background: transparent;
+}
+.project-nav-row:hover .project-nav {
+  color: var(--text);
+}
+.project-nav-row:hover .project-settings-button:hover {
+  background: var(--selected);
 }
 .project-nav-row .project-nav {
   flex: 1;

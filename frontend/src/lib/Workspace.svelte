@@ -140,9 +140,9 @@
     theme = $state('dark'),
     toast = $state('');
   const navigation = [
-    { name: 'Inbox', icon: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4' },
+    { name: 'Inbox', icon: 'M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 22h4' },
     { name: 'My Issues', icon: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M5 21a7 7 0 0 1 14 0' },
-    { name: 'Approvals', icon: 'M5 12l4 4L19 6' },
+    { name: 'Approvals', icon: 'M3 12l6 6L21 5' },
     { name: 'All Issues', icon: 'M9 6h11 M9 12h11 M9 18h11 M4 6h.01 M4 12h.01 M4 18h.01' },
     { name: 'Board', icon: 'M3 4h18v16H3z M9 4v16 M15 4v16' },
     { name: 'Projects', icon: 'M3 6h7l2 2h9v11H3z' },
@@ -1473,11 +1473,11 @@
             onclick={() => projectEditor()}><Icon name="plus" /></button
           >{/if}
       </div>
-      <a href={projectHref('')} class="project-nav" class:chosen={!project}
+      <a href={projectHref('')} class="sidebar-item project-nav" class:chosen={!project}
         aria-current={!project && ['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view) ? 'page' : undefined}
         ><span class="project-glyph"><Icon name="grid" /></span>All projects</a>
       {#each projects as item}<div class="project-nav-row" class:chosen={project === String(item.id)}>
-          <a href={projectHref(String(item.id))} class="project-nav"
+          <a href={projectHref(String(item.id))} class="sidebar-item project-nav"
             class:chosen={project === String(item.id)}
             aria-current={project === String(item.id) && ['All Issues', 'My Issues', 'Approvals', 'Board'].includes(view) ? 'page' : undefined}
             ><span class="project-glyph">{item.key.slice(0, 1)}</span>{item.name}</a>
@@ -1493,10 +1493,11 @@
       <nav>
         {#each navigation as item}<a
             href={href(item.name)}
+            class="sidebar-item"
             aria-current={view === item.name ? 'page' : undefined}
             class:active={view === item.name}
             ><span class="nav-icon"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d={item.icon} /></svg></span
-            >{item.name}{#if item.name === 'Inbox' && unread}<span class="counter">{unread}</span
+            ><span>{item.name}</span>{#if item.name === 'Inbox' && unread}<span class="counter">{unread}</span
               >{/if}{#if item.name === 'Approvals'}<span class="nav-dot"></span>{/if}</a
           >{/each}
       </nav>
@@ -1504,9 +1505,9 @@
       </div>
       <div class="sidebar-bottom">
         <a href={href('Settings')} aria-current={view === 'Settings' ? 'page' : undefined} class:active={view === 'Settings'}
-          ><span class="nav-icon"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9l2.1 2.1 M17 17l2.1 2.1 M19.1 4.9 17 7 M7 17l-2.1 2.1" /></svg></span>Settings</a
+          ><span class="nav-icon"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M10 2h4l.6 2.5 1.5.6 2.2-1.3 2.8 2.8-1.3 2.2.6 1.5 2.6.7v4l-2.6.6-.6 1.5 1.3 2.2-2.8 2.8-2.2-1.3-1.5.6L14 23h-4l-.6-2.6-1.5-.6-2.2 1.3-2.8-2.8 1.3-2.2-.6-1.5L1 14v-4l2.6-.6.6-1.5-1.3-2.2 2.8-2.8 2.2 1.3 1.5-.6L10 2Z" /></svg></span><span>Settings</span></a
         ><button onclick={() => (shortcuts = true)}
-          ><span class="nav-icon"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .7-1.5 1.2-1.5 2.5 M12 17h.01" /></svg></span>Keyboard shortcuts<kbd>?</kbd></button
+          ><span class="nav-icon"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .7-1.5 1.2-1.5 2.5 M12 17h.01" /></svg></span><span>Keyboard shortcuts</span><kbd>?</kbd></button
         >
         <div class="profile">
           <span class="avatar">{me.username.slice(0, 2).toUpperCase()}</span>
