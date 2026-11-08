@@ -294,7 +294,7 @@ time {
   align-items: center;
   gap: 10px;
   margin: 0;
-  padding-left: 11px;
+  padding: 8px 11px;
 }
 .workspace strong {
   font-size: 1rem;
@@ -368,15 +368,16 @@ time {
   margin-left: auto;
 }
 .sidebar-heading {
+  font-weight: 400;
   color: var(--subtle);
   font-size: 1rem;
+  font-variant: small-caps;
   letter-spacing: 1.1px;
   margin: 0;
   padding-left: 11px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 20px;
 }
 .sidebar-heading .icon-button {
   font-size: 1rem;
@@ -433,7 +434,7 @@ time {
   width: 17px;
   height: 17px;
   border-radius: 4px;
-  font-size: 1rem;
+  font-size: 0.8rem;
   flex-shrink: 0;
 }
 .sidebar-bottom {

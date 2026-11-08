@@ -1467,7 +1467,7 @@
       <div class="sidebar-group">
       <div class="sidebar-projects">
       <div class="sidebar-heading">
-        PROJECTS {#if owner}<button
+        projects {#if owner}<button
             class="icon-button"
             aria-label="Create project"
             onclick={() => projectEditor()}><Icon name="plus" /></button
