@@ -40,10 +40,19 @@ tasks.register('frontendBuild', Exec) {
     dependsOn 'frontendInstall'
     workingDir 'frontend'
     commandLine System.getProperty('os.name').toLowerCase().contains('windows') ? ['cmd', '/c', 'npm', 'run', 'build'] : ['npm', 'run', 'build']
-    inputs.dir('frontend/src'); inputs.files('frontend/index.html', 'frontend/vite.config.ts')
+    inputs.dir('frontend/src'); inputs.dir('frontend/public')
+    inputs.files('frontend/svelte.config.js', 'frontend/vite.config.ts', 'frontend/tsconfig.json')
     outputs.dir('frontend/dist')
 }
 tasks.named('processResources') {
     dependsOn 'frontendBuild'
     from('frontend/dist') { into 'static' }
+}
+
+tasks.register('bootRunBackend', org.springframework.boot.gradle.tasks.run.BootRun) {
+    group = 'application'
+    description = 'Runs the backend only, alongside the Vite development server.'
+    mainClass = 'dev.forge.tracker.TrackerApplication'
+    classpath = files(sourceSets.main.output.classesDirs, sourceSets.main.resources.srcDirs, configurations.runtimeClasspath)
+    javaLauncher = javaToolchains.launcherFor(java.toolchain)
 }

@@ -5,10 +5,16 @@ import dev.forge.tracker.persistence.Database;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Base64;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -100,16 +106,19 @@ public class SecurityConfiguration {
   @Bean
   @Order(2)
   SecurityFilterChain browser(HttpSecurity http) throws Exception {
+    String contentSecurityPolicy = browserContentSecurityPolicy();
     return http.authorizeHttpRequests(
             a ->
-                a.requestMatchers(
+                a.requestMatchers(dev.forge.tracker.common.PageController.PAGE_PATH)
+                    .permitAll()
+                    .requestMatchers(
                         "/api/csrf",
                         "/api/login",
                         "/api/register",
                         "/actuator/health",
                         "/",
                         "/index.html",
-                        "/assets/**",
+                        "/_app/**",
                         "/favicon.svg")
                     .permitAll()
                     .anyRequest()
@@ -144,11 +153,28 @@ public class SecurityConfiguration {
             h ->
                 h.contentSecurityPolicy(
                     c ->
-                        c.policyDirectives(
-                            "default-src 'self'; script-src 'self'; style-src 'self'"
-                                + " 'unsafe-inline'; img-src 'self' blob:; connect-src 'self';"
-                                + " frame-ancestors 'none'; base-uri 'self'; form-action 'self'")))
+                        c.policyDirectives(contentSecurityPolicy)))
         .build();
+  }
+
+  private static String browserContentSecurityPolicy() throws Exception {
+    // Each prerendered page and the client fallback have their own generated bootstrap.
+    // API-only development can run beside Vite without a packaged frontend.
+    var hashes = new LinkedHashSet<String>();
+    var scriptPattern = Pattern.compile("<script\\b[^>]*>(.*?)</script>", Pattern.DOTALL);
+    for (var page : new PathMatchingResourcePatternResolver().getResources("classpath*:static/**/*.html")) {
+      var scripts = scriptPattern.matcher(page.getContentAsString(StandardCharsets.UTF_8));
+      while (scripts.find()) {
+        String script = scripts.group(1);
+        if (!script.isBlank()) {
+          byte[] digest = MessageDigest.getInstance("SHA-256").digest(script.getBytes(StandardCharsets.UTF_8));
+          hashes.add(" 'sha256-" + Base64.getEncoder().encodeToString(digest) + "'");
+        }
+      }
+    }
+    return "default-src 'self'; script-src 'self'" + String.join("", hashes)
+        + "; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; connect-src 'self';"
+        + " frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
   }
 
   private static void json(HttpServletResponse response, int status, String code, String message)

@@ -931,6 +931,88 @@ class TrackerIntegrationTest {
   }
 
   @Test
+  void browserPageUrlsServeTheAppBeforeSignIn() throws Exception {
+    var client = HttpClient.newHttpClient();
+    String base = "http://localhost:" + port;
+    for (String path : List.of(
+        "/", "/inbox", "/my-issues", "/approvals", "/issues?project=123",
+        "/board", "/projects", "/settings", "/settings/account", "/settings/people",
+        "/settings/mcp-connections", "/settings/audit-log", "/projects/123/settings",
+        "/inbox/", "/settings/people/", "/future-page")) {
+      var response = client.send(
+          HttpRequest.newBuilder(URI.create(base + path)).GET().build(),
+          HttpResponse.BodyHandlers.ofString());
+      assertThat(response.statusCode()).as(path).isEqualTo(200);
+      assertThat(response.headers().firstValue("Content-Type").orElse("")).contains("text/html");
+      assertThat(response.body()).as(path).contains("<div id=\"app\">");
+      String pagePath = path.split("\\?", 2)[0].replaceAll("/+$", "");
+      String resourcePath = pagePath.isEmpty() ? "index" : pagePath.substring(1);
+      var html = new org.springframework.core.io.ClassPathResource("static/" + resourcePath + ".html");
+      boolean prerendered = !List.of("/projects/123/settings", "/future-page").contains(pagePath);
+      if (prerendered) {
+        assertThat(html.exists()).as("prerendered HTML for %s", path).isTrue();
+        assertThat(response.body()).contains("Opening Forge…", "<title>");
+      } else {
+        html = new org.springframework.core.io.ClassPathResource("static/200.html");
+      }
+      assertThat(response.body()).as("served HTML for %s", path)
+          .isEqualTo(html.getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    for (String path : List.of("/api/tasks", "/api/projects", "/api/not-a-page", "/actuator/env", "/mcp")) {
+      var response = client.send(
+          HttpRequest.newBuilder(URI.create(base + path)).GET().build(),
+          HttpResponse.BodyHandlers.ofString());
+      assertThat(response.statusCode()).as(path).isEqualTo(401);
+      assertThat(response.body()).doesNotContain("<div id=\"app\">");
+    }
+  }
+
+  @Test
+  void sveltekitBootstrapAndAssetsAreAllowedBeforeSignIn() throws Exception {
+    var client = HttpClient.newHttpClient();
+    String base = "http://localhost:" + port;
+    var response = client.send(
+        HttpRequest.newBuilder(URI.create(base + "/inbox")).GET().build(),
+        HttpResponse.BodyHandlers.ofString());
+    String policy = response.headers().firstValue("Content-Security-Policy").orElseThrow();
+    assertThat(policy).contains("script-src 'self' 'sha256-");
+    assertThat(policy.substring(policy.indexOf("script-src"), policy.indexOf(";", policy.indexOf("script-src"))))
+        .doesNotContain("unsafe-inline");
+    for (String path : List.of("/", "/inbox", "/my-issues", "/approvals", "/issues", "/board",
+        "/projects", "/settings", "/settings/account", "/settings/people",
+        "/settings/mcp-connections", "/settings/audit-log", "/projects/123/settings")) {
+      var page = client.send(
+          HttpRequest.newBuilder(URI.create(base + path)).GET().build(),
+          HttpResponse.BodyHandlers.ofString());
+      var scripts = java.util.regex.Pattern.compile("<script\\b[^>]*>(.*?)</script>", java.util.regex.Pattern.DOTALL)
+          .matcher(page.body());
+      int count = 0;
+      while (scripts.find()) {
+        if (scripts.group(1).isBlank()) continue;
+        byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(scripts.group(1).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertThat(policy).as("bootstrap policy for %s", path)
+            .contains("'sha256-" + Base64.getEncoder().encodeToString(digest) + "'");
+        count++;
+      }
+      assertThat(count).as("bootstrap for %s", path).isPositive();
+    }
+    var assets = java.util.regex.Pattern.compile("[\"'](/_app/[^\"']+)[\"']").matcher(response.body());
+    int assetCount = 0;
+    while (assets.find()) {
+      String path = assets.group(1);
+      var asset = client.send(
+          HttpRequest.newBuilder(URI.create(base + path)).GET().build(),
+          HttpResponse.BodyHandlers.ofString());
+      assertThat(asset.statusCode()).as(path).isEqualTo(200);
+      assertThat(asset.headers().firstValue("Content-Type").orElse("")).doesNotContain("text/html");
+      assertThat(asset.body()).isNotBlank();
+      assetCount++;
+    }
+    assertThat(assetCount).isPositive();
+  }
+
+  @Test
   void browserSessionRequiresCsrfAndServesRealApi() throws Exception {
     var cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
     var client = HttpClient.newBuilder().cookieHandler(cookies).build();

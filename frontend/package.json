@@ -3,10 +3,13 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "imports": { "#lib/*": "./src/lib/*" },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "svelte-check --tsconfig ./tsconfig.json && vite build",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "build": "npm run check && vite build",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "prepare": "svelte-kit sync",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "dompurify": "^3.3.0",
@@ -14,13 +17,16 @@
     "svelte": "^5.43.8"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@playwright/test": "^1.64.1",
+    "@sveltejs/adapter-static": "4.0.1",
+    "@sveltejs/kit": "3.1.1",
+    "@sveltejs/vite-plugin-svelte": "7.0.0",
     "@tailwindcss/vite": "^4.1.17",
     "prettier": "^3.9.10",
     "prettier-plugin-svelte": "^4.1.1",
     "svelte-check": "^4.3.3",
     "tailwindcss": "^4.1.17",
-    "typescript": "^5.9.3",
-    "vite": "^7.2.2"
+    "typescript": "6.0.3",
+    "vite": "^8.3.6"
   }
 }

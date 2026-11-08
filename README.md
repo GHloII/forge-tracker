@@ -1,6 +1,6 @@
 # Forge
 
-A self-hosted issue tracker for small teams and coding agents. Java 21, Spring Boot, SQLite, Svelte and MCP Streamable HTTP run in one application process. Caddy provides the HTTPS entry point.
+A self-hosted issue tracker for small teams and coding agents. Java 21, Spring Boot, SQLite, SvelteKit and MCP Streamable HTTP run in one application process. Caddy provides the HTTPS entry point.
 
 Production: https://forge.144-31-86-112.sslip.io
 
@@ -67,6 +67,29 @@ Repeat imports with the same source name, normalized category/title and occurren
 
 ## Development
 
+### Devcontainer (recommended for frontend work)
+
+Install Docker Desktop and the VS Code Dev Containers extension. Open this repository
+in VS Code and run **Dev Containers: Reopen in Container** from the command palette.
+The container includes Java 21 and Node 22, and installs Codex CLI and frontend dependencies.
+To use Codex, run `codex login --device-auth`, follow the sign-in instructions,
+then run `codex` from the project root in a container terminal.
+In its terminal, run:
+
+```bash
+bash .devcontainer/start.sh
+```
+
+Open http://localhost:5173. Edit `frontend/src` and save to see changes immediately.
+Sign in as `owner` / `local-development-password` on a fresh database.
+Local data persists in the workspace's ignored `data/` directory. Ctrl+C stops both
+servers. The initial Gradle run downloads dependencies; backend startup may take
+longer than Vite. Use localhost port 5173 so the browser origin matches configuration.
+Run checks inside the container with `bash gradlew test bootJar` and
+`cd frontend && npm run check && npm run build`.
+
+### Local development
+
 Java 21 and Node 22.12+ are required. The Gradle wrapper is included and its distribution checksum is pinned.
 
 ```powershell
@@ -77,6 +100,13 @@ $env:PUBLIC_ORIGIN = 'http://localhost:8080'
 ```
 
 Open `http://localhost:8080`. Gradle builds the frontend and serves it from the application. For frontend hot reload, run `npm ci` and `npm run dev` in `frontend` alongside the backend. Vite proxies `/api` to port 8080. Production cookies are secure by default; disable this only for local HTTP.
+
+For backend-only startup alongside Vite, use `.\gradlew.bat bootRunBackend`. This skips frontend installation and building. Set `PUBLIC_ORIGIN` to `http://localhost:5173` and open Vite's URL. To use another backend port, pass `--args="--server.port=8081"` and set `DEV_API_TARGET=http://localhost:8081` in the frontend terminal before running `npm run dev`.
+
+SvelteKit uses file-based routes in `frontend/src/routes`, native links and `goto` for navigation. The shared layout preserves workspace state between pages. The static adapter prerenders public page shells into `frontend/dist`; Spring Boot serves each route's generated HTML for direct visits. Authenticated data loads in the browser. Project settings URLs contain runtime project IDs and use the generated `200.html` client fallback, as do unknown page URLs. No Node server runs in production.
+
+Run navigation browser tests with `cd frontend && npx playwright install --with-deps chromium --only-shell && npm run test:e2e`.
+To test the generated pages, build the frontend first, then run `PLAYWRIGHT_PREVIEW=1 npm run test:e2e` from `frontend`.
 
 ```sh
 ./gradlew test bootJar

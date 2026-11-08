@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import LoadingIndicator from './LoadingIndicator.svelte';
   import { api, type Entry, type Person, type Project } from './api';
 
   let { project, onUpdated }: { project: Project; onUpdated: () => Promise<void> } = $props();
@@ -37,20 +38,25 @@
   );
 
   async function load() {
-    const [context, nextRoles, nextInvitations, nextUsers] = await Promise.all([
-      api<Entry>(endpoint),
-      api<Entry[]>(`${endpoint}/roles`),
-      api<Entry[]>(`${endpoint}/invitations`),
-      api<Person[]>('/users'),
-    ]);
-    participants = context.participants;
-    roles = nextRoles;
-    invitations = nextInvitations;
-    users = nextUsers;
-    if (!roles.some((r) => String(r.id) === inviteRole))
-      inviteRole = String(roles.find((r) => r.permission === 'WRITE')?.id ?? roles[0]?.id ?? '');
-    if (!roles.some((r) => String(r.id) === memberRole)) memberRole = inviteRole;
-    if (!availableUsers.some((u) => String(u.id) === memberUser)) memberUser = '';
+    loading = true;
+    try {
+      const [context, nextRoles, nextInvitations, nextUsers] = await Promise.all([
+        api<Entry>(endpoint),
+        api<Entry[]>(`${endpoint}/roles`),
+        api<Entry[]>(`${endpoint}/invitations`),
+        api<Person[]>('/users'),
+      ]);
+      participants = context.participants;
+      roles = nextRoles;
+      invitations = nextInvitations;
+      users = nextUsers;
+      if (!roles.some((r) => String(r.id) === inviteRole))
+        inviteRole = String(roles.find((r) => r.permission === 'WRITE')?.id ?? roles[0]?.id ?? '');
+      if (!roles.some((r) => String(r.id) === memberRole)) memberRole = inviteRole;
+      if (!availableUsers.some((u) => String(u.id) === memberUser)) memberUser = '';
+    } finally {
+      loading = false;
+    }
   }
 
   async function run(action: () => Promise<void>) {
@@ -110,9 +116,7 @@
       description: project.description,
       repository: project.repository,
     };
-    void run(load).finally(() => {
-      loading = false;
-    });
+    void run(load);
   });
 </script>
 
@@ -134,7 +138,7 @@
 <div class="settings-content project-settings">
   {#if error}<div class="error" role="alert">{error}</div>{/if}
   {#if message}<p class="settings-notice" role="status">{message}</p>{/if}
-  {#if loading}<p class="muted">Loading project settings…</p>
+  {#if loading}<LoadingIndicator label="Loading project settings…" />
   {:else if tab === 'General'}
     <section>
       <h2>Project details</h2>
@@ -166,7 +170,7 @@
           }}>Invite to project</button
         >
       </div>
-      <p>Roles control access to this project. Workspace owners always have full access.</p>
+      <p>Roles control access to this project. Owners always have full access.</p>
       <div class="project-member-list">
         {#each participants as person}
           <div class="project-member-row">
@@ -176,7 +180,7 @@
                 >@{person.username}{person.kind === 'AGENT' ? ' · Agent' : ''}</small
               >
             </div>
-            {#if person.kind === 'OWNER'}<span class="tag">Workspace owner</span>
+            {#if person.kind === 'OWNER'}<span class="tag">Owner</span>
             {:else}
               <select
                 aria-label={`Role for ${person.display_name}`}
@@ -322,7 +326,7 @@
       <h2>Project roles</h2>
       <p>
         Give roles names that fit your team. Each role uses one permission level. Task management
-        does not grant approval, invitation or workspace administration rights.
+        does not grant approval, invitation or administration rights.
       </p>
       <div class="project-member-list">
         {#each roles as role}<div class="project-member-row">
