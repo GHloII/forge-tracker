@@ -12,9 +12,10 @@ Repository secrets: `DEPLOY_SSH_KEY` (a dedicated forced-command key),
 `DEPLOY_HOST`, `PUBLIC_URL`. Never copy these secrets into Git.
 
 Server directory: `/opt/forge-tracker`. Its `.env` contains the initial owner
-credentials and public origin. `.release.env` identifies the deployed image;
-`deployed-revision` records the healthy commit. The SQLite database and images
-live in the persistent Docker volume `forge-tracker-data`.
+credentials and public origin. `.release.env` identifies the configured image.
+`deployed-revision` records the last successful deploy, and `previous-revision`
+records its healthy predecessor once known. The SQLite database and uploaded
+images live in the persistent Docker volume `forge-tracker-data`.
 
 The existing Caddy proxy routes the Forge hostname to `forge-tracker:8080` on
 the existing Docker network. The application exposes no public host port.
@@ -24,10 +25,12 @@ for the CI SSH key. Changes to that script or production Compose configuration
 require an operator to inspect and install them; pushes deploy application images.
 
 Deployments are serialized, SHA-256 verified, and health checked. Before replacing
-an existing container, its data is backed up while stopped. Three backups and the
-previous image are retained. An unhealthy new container triggers a return to the
-previous image. Database migrations must remain backward compatible: automatic
-image rollback deliberately does not overwrite the database or new user data.
+an existing container, the script stops it and backs up its data. After a healthy
+deploy or rollback, the script keeps the three newest data backups and the two
+most recent distinct healthy images. When upgrading an existing installation,
+older images stay available until the script can identify the predecessor.
+Automatic rollback switches the image and leaves the data in place. Database
+migrations must remain backward compatible.
 For an incompatible migration, stop the app and restore a chosen backup manually.
 Backups on this VPS are not a substitute for off-server backups.
 
